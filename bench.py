@@ -1,445 +1,483 @@
 """
-Benchmark and analysis tools for hybrid search performance
+Comprehensive benchmark script for testing search performance with different filtering scenarios
 """
 
 import os
+import sys
 import time
 import json
-from typing import Dict, Any, Optional, List
+import csv
+import argparse
+from pathlib import Path
+from typing import List, Dict, Optional
+from dataclasses import dataclass
+from statistics import mean, median, stdev
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
-from rich import print
+from dotenv import load_dotenv
 from rich.console import Console
 from rich.table import Table
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
-from dotenv import load_dotenv
-from datasets import load_dataset
-import numpy as np
+from rich.progress import Progress, SpinnerColumn, TextColumn
+from datetime import datetime
 
-from models import User, UserDocument, UserDocumentChunk
-from schemas import SearchRequest, SearchType
+# Import query module
 from query import SearchEngine
 
 load_dotenv()
-console = Console()
+
+
+@dataclass
+class BenchmarkResult:
+    """Store benchmark results for a single query"""
+    query_id: int
+    query_text: str
+    latency_ms: float
+    result_count: int
+    filter_type: str
+    found_ground_truth: bool
+    ground_truth_rank: Optional[int]
+    ground_truth_chunk_id: int
 
 
 class SearchBenchmark:
-    """Benchmark tool for analyzing search performance"""
+    """Benchmark different search modes with various filtering scenarios"""
     
-    def __init__(self, db_url: Optional[str] = None):
-        if db_url is None:
-            db_url = os.getenv(
-                'DATABASE_URL',
-                'postgresql://postgres:postgres@localhost:54320/leo_pgvector'
-            )
+    def __init__(self, csv_file: str, json_file: str = None):
+        self.console = Console()
+        self.csv_file = csv_file
+        self.json_file = json_file
         
+        # Connect to database
+        db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/leo_pgvector")
         self.engine = create_engine(db_url, echo=False)
-        self.SessionLocal = sessionmaker(bind=self.engine)
-        self.search_engine = SearchEngine(db_url)
+        
+        # Initialize SearchEngine
+        self.search = SearchEngine(db_url)
+        
+        # Load benchmark data
+        self.queries = self._load_benchmark_data()
+        self.console.print(f"[green]Loaded {len(self.queries)} benchmark queries[/green]")
+        
+        # Get available user IDs for testing
+        self.user_ids = list({q['ground_truth_user_id'] for q in self.queries})
+        self.console.print(f"[green]Found {len(self.user_ids)} unique users in benchmark[/green]")
     
-    def analyze_query_performance(
-        self, 
-        request: SearchRequest
-    ) -> Dict[str, Any]:
-        """
-        Analyze query performance and index usage with detailed metrics.
+    def _load_benchmark_data(self) -> List[Dict]:
+        """Load benchmark queries from CSV and embeddings from JSON"""
+        queries = []
         
-        Args:
-            request: SearchRequest to analyze
-        
-        Returns:
-            Dictionary with performance metrics
-        """
-        metrics = {
-            'request': {
-                'search_type': request.search_type.value,
-                'limit': request.limit,
-                'search_depth': request.search_depth,
-                'rrf_k': request.rrf_k,
-                'user_id': request.user_id
-            },
-            'performance': {}
-        }
-        
-        # Analyze vector search if embedding provided
-        if request.embedding:
-            embedding_str = '[' + ','.join(map(str, request.embedding)) + ']'
-            
-            with self.engine.connect() as conn:
-                # Get execution plan
-                result = conn.execute(text("""
-                    EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
-                    SELECT c.id
-                    FROM user_document_chunks c
-                    JOIN user_documents d ON c.user_document_id = d.id
-                    WHERE (:user_id IS NULL OR d.user_id = :user_id)
-                    ORDER BY c.embedding <#> :embedding::vector
-                    LIMIT :limit
-                """), {
-                    'embedding': embedding_str, 
-                    'limit': request.search_depth,
-                    'user_id': request.user_id
-                })
+        # Load CSV data
+        with open(self.csv_file, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                query_data = {
+                    'query_id': int(row['query_id']),
+                    'query_text': row['query_text'],
+                    'ground_truth_chunk_id': int(row['ground_truth_chunk_id']),
+                    'ground_truth_document_id': int(row['ground_truth_document_id']),
+                    'ground_truth_user_id': int(row['ground_truth_user_id']),
+                    'ground_truth_paragraph_id': int(row['ground_truth_paragraph_id']),
+                    'document_title': row['document_title'],
+                    'chunk_text_preview': row['chunk_text_preview']
+                }
                 
-                plan = json.loads(result.scalar())[0]
-                metrics['performance']['vector_search'] = self._extract_metrics(plan)
+                # Parse metadata if present
+                if 'meta' in row and row['meta']:
+                    import ast
+                    try:
+                        query_data['meta'] = ast.literal_eval(row['meta'])
+                    except:
+                        query_data['meta'] = {}
+                else:
+                    query_data['meta'] = {}
+                    
+                queries.append(query_data)
         
-        # Analyze text search if query text provided
-        if request.query_text:
-            with self.engine.connect() as conn:
-                result = conn.execute(text("""
-                    EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
-                    SELECT c.id
-                    FROM user_document_chunks c
-                    JOIN user_documents d ON c.user_document_id = d.id
-                    WHERE websearch_to_tsquery('english', :query) @@ c.text_search_vector
-                    AND (:user_id IS NULL OR d.user_id = :user_id)
-                    LIMIT :limit
-                """), {
-                    'query': request.query_text, 
-                    'limit': request.search_depth,
-                    'user_id': request.user_id
-                })
+        # Load embeddings from JSON if provided
+        if self.json_file and Path(self.json_file).exists():
+            with open(self.json_file, 'r') as f:
+                embeddings = json.load(f)
+                for query in queries:
+                    query_id_str = str(query['query_id'])
+                    if query_id_str in embeddings:
+                        # Handle both old and new JSON formats
+                        if isinstance(embeddings[query_id_str], dict):
+                            query['embedding'] = embeddings[query_id_str].get('query_embedding', [])
+                            # Also load metadata from JSON if not in CSV
+                            if 'meta' in embeddings[query_id_str] and not query.get('meta'):
+                                query['meta'] = embeddings[query_id_str]['meta']
+                        else:
+                            query['embedding'] = embeddings[query_id_str]
+        
+        return queries
+    
+    def _format_embedding(self, embedding: List[float]) -> str:
+        """Format embedding for PostgreSQL"""
+        return "[" + ",".join(map(str, embedding)) + "]"
+    
+    def benchmark_vector_search(self, filter_type: str, limit: int = 10) -> List[BenchmarkResult]:
+        """Benchmark vector/semantic search with different filters"""
+        results = []
+        
+        with self.engine.connect() as conn:
+            for query_data in self.queries:
+                # Skip if no embedding available
+                if 'embedding' not in query_data:
+                    continue
+                    
+                user_id = query_data['ground_truth_user_id']
+                embedding = query_data['embedding']
+                embedding_str = self._format_embedding(embedding)
+                meta = query_data.get('meta', {})
                 
-                plan = json.loads(result.scalar())[0]
-                metrics['performance']['text_search'] = self._extract_metrics(plan)
-        
-        # Analyze hybrid search if both provided
-        if request.embedding and request.query_text and request.search_type == SearchType.HYBRID:
-            embedding_str = '[' + ','.join(map(str, request.embedding)) + ']'
-            
-            with self.engine.connect() as conn:
-                result = conn.execute(text("""
-                    EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON)
-                    SELECT * FROM hybrid_search(
-                        :query_text,
-                        :embedding ::vector(768),
-                        :limit,
-                        :user_id,
-                        :full_text_weight,
-                        :semantic_weight,
-                        :rrf_k
-                    )
-                """), {
-                    'query_text': request.query_text,
-                    'embedding': embedding_str,
-                    'limit': request.limit,
-                    'user_id': request.user_id,
-                    'full_text_weight': request.full_text_weight,
-                    'semantic_weight': request.semantic_weight,
-                    'rrf_k': request.rrf_k
-                })
+                # Use different filtering strategies
+                start_time = time.time()
+                if filter_type == "no_filter":
+                    # Direct SQL query without any filters
+                    query = text("""
+                        SELECT id, user_document_id, embedding <#> :embedding ::vector AS distance
+                        FROM user_document_chunks
+                        ORDER BY embedding <#> :embedding ::vector
+                        LIMIT :limit
+                    """)
+                    result = conn.execute(query, {"embedding": embedding_str, "limit": limit})
+                    rows = result.fetchall()
+                elif filter_type == "user_only":
+                    # Filter by user only
+                    rows, _ = self.search.vector_search(user_id, embedding, limit)
+                elif filter_type == "user_jsonb":
+                    # User + JSONB filters based on actual metadata
+                    # Use common metadata attributes from the ground truth chunk
+                    position = meta.get('position', 'middle')
+                    has_code = meta.get('has_code', False)
+                    
+                    query = text("""
+                        SELECT id, user_document_id, embedding <#> :embedding ::vector AS distance
+                        FROM user_document_chunks
+                        WHERE user_id = :user_id
+                          AND meta->>'position' = :position
+                          AND (meta->>'has_code')::boolean = :has_code
+                        ORDER BY embedding <#> :embedding ::vector
+                        LIMIT :limit
+                    """)
+                    result = conn.execute(query, {
+                        "user_id": user_id,
+                        "embedding": embedding_str,
+                        "position": position,
+                        "has_code": has_code,
+                        "limit": limit
+                    })
+                    rows = result.fetchall()
+                elif filter_type == "user_jsonb_complex":
+                    # User + Complex JSONB queries
+                    complexity = meta.get('complexity_score', 5.0)
+                    
+                    query = text("""
+                        SELECT id, user_document_id, embedding <#> :embedding ::vector AS distance
+                        FROM user_document_chunks
+                        WHERE user_id = :user_id
+                          AND (meta->>'complexity_score')::float >= :min_complexity
+                          AND (meta->>'complexity_score')::float <= :max_complexity
+                          AND meta->>'language_detected' = 'en'
+                        ORDER BY embedding <#> :embedding ::vector
+                        LIMIT :limit
+                    """)
+                    result = conn.execute(query, {
+                        "user_id": user_id,
+                        "embedding": embedding_str,
+                        "min_complexity": max(0, complexity - 2),
+                        "max_complexity": complexity + 2,
+                        "limit": limit
+                    })
+                    rows = result.fetchall()
+                else:
+                    continue
                 
-                plan = json.loads(result.scalar())[0]
-                metrics['performance']['hybrid_search'] = self._extract_metrics(plan)
-        
-        return metrics
-    
-    def _extract_metrics(self, plan: dict) -> dict:
-        """Extract key metrics from query plan"""
-        return {
-            'execution_time_ms': plan['Execution Time'],
-            'planning_time_ms': plan['Planning Time'],
-            'total_time_ms': plan['Execution Time'] + plan['Planning Time'],
-            'rows_returned': plan['Plan'].get('Actual Rows', 0),
-            'shared_buffers': {
-                'hits': plan['Plan'].get('Shared Hit Blocks', 0),
-                'reads': plan['Plan'].get('Shared Read Blocks', 0)
-            },
-            'uses_index': self._check_index_usage(plan['Plan'])
-        }
-    
-    def _check_index_usage(self, plan: dict) -> dict:
-        """Check which indexes are being used"""
-        index_usage = {
-            'hnsw': False,
-            'gin': False,
-            'btree': False
-        }
-        
-        def check_node(node):
-            node_type = node.get('Node Type', '')
-            index_name = node.get('Index Name', '').lower()
-            
-            if 'Index' in node_type:
-                if 'hnsw' in index_name:
-                    index_usage['hnsw'] = True
-                elif 'gin' in index_name or 'text_search' in index_name:
-                    index_usage['gin'] = True
-                elif 'btree' in node_type.lower() or 'idx' in index_name:
-                    index_usage['btree'] = True
-            
-            # Recursively check child nodes
-            if 'Plans' in node:
-                for child in node['Plans']:
-                    check_node(child)
-        
-        check_node(plan)
-        return index_usage
-    
-    def benchmark_search_methods(
-        self,
-        query_text: str,
-        embedding: List[float],
-        iterations: int = 5,
-        limit: int = 10,
-        user_id: Optional[int] = None
-    ) -> Dict[str, Any]:
-        """
-        Benchmark different search methods with timing
-        
-        Args:
-            query_text: Search query
-            embedding: Query embedding vector
-            iterations: Number of iterations for averaging
-            limit: Result limit
-            user_id: Optional user filter
-        
-        Returns:
-            Benchmark results
-        """
-        results = {
-            'iterations': iterations,
-            'limit': limit,
-            'methods': {}
-        }
-        
-        # Test vector search
-        vector_times = []
-        for _ in range(iterations):
-            start = time.time()
-            self.search_engine.vector_search(embedding, limit, user_id)
-            vector_times.append((time.time() - start) * 1000)
-        
-        results['methods']['vector'] = {
-            'avg_ms': np.mean(vector_times),
-            'min_ms': np.min(vector_times),
-            'max_ms': np.max(vector_times),
-            'std_ms': np.std(vector_times)
-        }
-        
-        # Test text search
-        text_times = []
-        for _ in range(iterations):
-            start = time.time()
-            self.search_engine.text_search(query_text, limit, user_id)
-            text_times.append((time.time() - start) * 1000)
-        
-        results['methods']['text'] = {
-            'avg_ms': np.mean(text_times),
-            'min_ms': np.min(text_times),
-            'max_ms': np.max(text_times),
-            'std_ms': np.std(text_times)
-        }
-        
-        # Test hybrid search (SQL-based)
-        hybrid_sql_times = []
-        for _ in range(iterations):
-            start = time.time()
-            self.search_engine.hybrid_search_sql(
-                embedding, query_text, limit, 
-                search_depth=40, rrf_k=50, user_id=user_id
-            )
-            hybrid_sql_times.append((time.time() - start) * 1000)
-        
-        results['methods']['hybrid_sql'] = {
-            'avg_ms': np.mean(hybrid_sql_times),
-            'min_ms': np.min(hybrid_sql_times),
-            'max_ms': np.max(hybrid_sql_times),
-            'std_ms': np.std(hybrid_sql_times)
-        }
-        
-        # Test hybrid search (function-based)
-        hybrid_func_times = []
-        for _ in range(iterations):
-            start = time.time()
-            self.search_engine.hybrid_search_function(
-                embedding, query_text, limit, user_id
-            )
-            hybrid_func_times.append((time.time() - start) * 1000)
-        
-        results['methods']['hybrid_function'] = {
-            'avg_ms': np.mean(hybrid_func_times),
-            'min_ms': np.min(hybrid_func_times),
-            'max_ms': np.max(hybrid_func_times),
-            'std_ms': np.std(hybrid_func_times)
-        }
+                latency_ms = (time.time() - start_time) * 1000
+                
+                # Check if ground truth was found
+                if filter_type in ["no_filter", "user_jsonb", "user_jsonb_complex"]:
+                    found_ids = [row[0] for row in rows]
+                else:
+                    found_ids = [row['id'] for row in rows]
+                ground_truth_id = query_data['ground_truth_chunk_id']
+                found = ground_truth_id in found_ids
+                rank = found_ids.index(ground_truth_id) + 1 if found else None
+                
+                results.append(BenchmarkResult(
+                    query_id=query_data['query_id'],
+                    query_text=query_data['query_text'],
+                    latency_ms=latency_ms,
+                    result_count=len(rows),
+                    filter_type=filter_type,
+                    found_ground_truth=found,
+                    ground_truth_rank=rank,
+                    ground_truth_chunk_id=ground_truth_id
+                ))
         
         return results
     
-    def display_benchmark_results(self, results: dict):
-        """Display benchmark results in a formatted table"""
-        table = Table(title="Search Method Benchmark Results")
-        table.add_column("Method", style="cyan", width=20)
-        table.add_column("Avg (ms)", style="green", width=12)
-        table.add_column("Min (ms)", style="yellow", width=12)
-        table.add_column("Max (ms)", style="yellow", width=12)
-        table.add_column("Std Dev", style="magenta", width=12)
+    def benchmark_text_search(self, filter_type: str, limit: int = 10) -> List[BenchmarkResult]:
+        """Benchmark keyword/text search with different filters"""
+        results = []
         
-        for method, metrics in results['methods'].items():
-            table.add_row(
-                method.replace('_', ' ').title(),
-                f"{metrics['avg_ms']:.2f}",
-                f"{metrics['min_ms']:.2f}",
-                f"{metrics['max_ms']:.2f}",
-                f"{metrics['std_ms']:.2f}"
-            )
-        
-        console.print(table)
-        console.print(f"\n[dim]Iterations: {results['iterations']}, Limit: {results['limit']}[/dim]")
-    
-    def display_performance_analysis(self, metrics: dict):
-        """Display detailed performance analysis"""
-        console.print("\n[bold cyan]Query Performance Analysis[/bold cyan]\n")
-        
-        # Request details
-        console.print("[bold]Request Parameters:[/bold]")
-        for key, value in metrics['request'].items():
-            console.print(f"  {key}: {value}")
-        
-        # Performance metrics
-        if metrics['performance']:
-            console.print("\n[bold]Performance Metrics:[/bold]")
-            
-            for search_type, perf in metrics['performance'].items():
-                console.print(f"\n  [yellow]{search_type.replace('_', ' ').title()}:[/yellow]")
-                console.print(f"    Total Time: {perf['total_time_ms']:.2f}ms")
-                console.print(f"    Planning: {perf['planning_time_ms']:.2f}ms")
-                console.print(f"    Execution: {perf['execution_time_ms']:.2f}ms")
-                console.print(f"    Rows: {perf['rows_returned']}")
-                console.print(f"    Buffer Hits: {perf['shared_buffers']['hits']}")
-                console.print(f"    Buffer Reads: {perf['shared_buffers']['reads']}")
+        with self.engine.connect() as conn:
+            for query_data in self.queries:
+                user_id = query_data['ground_truth_user_id']
+                query_text = query_data['query_text']
                 
-                console.print("    Index Usage:")
-                for idx_type, used in perf['uses_index'].items():
-                    status = "✓" if used else "✗"
-                    color = "green" if used else "red"
-                    console.print(f"      [{color}]{status}[/{color}] {idx_type.upper()}")
+                # Use SearchQuery class methods
+                start_time = time.time()
+                if filter_type == "no_filter":
+                    # Direct SQL query without user filter
+                    query = text("""
+                        SELECT id, user_document_id,
+                               ts_rank_cd(text_search_vector, websearch_to_tsquery('english', :query)) AS relevance
+                        FROM user_document_chunks
+                        WHERE websearch_to_tsquery('english', :query) @@ text_search_vector
+                        ORDER BY relevance DESC
+                        LIMIT :limit
+                    """)
+                    result = conn.execute(query, {"query": query_text, "limit": limit})
+                    rows = result.fetchall()
+                else:
+                    # Use SearchEngine class with user filter
+                    rows, _ = self.search.text_search(user_id, query_text, limit)
+                
+                latency_ms = (time.time() - start_time) * 1000
+                
+                # Check if ground truth was found
+                if filter_type in ["no_filter", "user_jsonb", "user_jsonb_complex"]:
+                    found_ids = [row[0] for row in rows]
+                else:
+                    found_ids = [row['id'] for row in rows]
+                ground_truth_id = query_data['ground_truth_chunk_id']
+                found = ground_truth_id in found_ids
+                rank = found_ids.index(ground_truth_id) + 1 if found else None
+                
+                results.append(BenchmarkResult(
+                    query_id=query_data['query_id'],
+                    query_text=query_data['query_text'],
+                    latency_ms=latency_ms,
+                    result_count=len(rows),
+                    filter_type=filter_type,
+                    found_ground_truth=found,
+                    ground_truth_rank=rank,
+                    ground_truth_chunk_id=ground_truth_id
+                ))
+        
+        return results
     
-    def run_comprehensive_benchmark(self):
-        """Run a comprehensive benchmark with sample data"""
-        console.print("[bold magenta]Running Comprehensive Search Benchmark[/bold magenta]\n")
+    def benchmark_hybrid_search(self, filter_type: str, limit: int = 10) -> List[BenchmarkResult]:
+        """Benchmark hybrid search combining vector and text search"""
+        results = []
         
-        # Load sample data for testing
-        with Progress() as progress:
-            task = progress.add_task("[cyan]Loading sample data...", total=1)
-            dataset = load_dataset(
-                "Cohere/wikipedia-22-12-simple-embeddings", 
-                split="train[:5]"
-            )
-            sample = dataset[2]  # Pick a sample
-            progress.update(task, advance=1)
-        
-        query_text = "science technology innovation"
-        embedding = sample['emb']
-        
-        console.print(f"[bold]Test Query:[/bold] '{query_text}'\n")
-        
-        # Create request for analysis
-        request = SearchRequest(
-            query_text=query_text,
-            embedding=embedding,
-            search_type=SearchType.HYBRID,
-            limit=10,
-            search_depth=40,
-            rrf_k=50
-        )
-        
-        # Performance analysis
-        console.print("[cyan]Analyzing query performance...[/cyan]")
-        metrics = self.analyze_query_performance(request)
-        self.display_performance_analysis(metrics)
-        
-        # Benchmark different methods
-        console.print("\n[cyan]Benchmarking search methods...[/cyan]")
-        benchmark_results = self.benchmark_search_methods(
-            query_text=query_text,
-            embedding=embedding,
-            iterations=5,
-            limit=10
-        )
-        self.display_benchmark_results(benchmark_results)
-        
-        # Compare result quality
-        console.print("\n[bold cyan]Result Quality Comparison[/bold cyan]")
-        self._compare_result_quality(query_text, embedding)
-    
-    def _compare_result_quality(self, query_text: str, embedding: List[float]):
-        """Compare the quality of results from different search methods"""
-        # Get results from each method
-        vector_results = self.search_engine.vector_search(embedding, limit=5)
-        text_results = self.search_engine.text_search(query_text, limit=5)
-        hybrid_results = self.search_engine.hybrid_search_sql(
-            embedding, query_text, limit=5
-        )
-        
-        # Display comparison
-        table = Table(title="Top 5 Results Comparison")
-        table.add_column("Rank", style="cyan", width=6)
-        table.add_column("Vector Search", style="yellow", width=30)
-        table.add_column("Text Search", style="green", width=30)
-        table.add_column("Hybrid Search", style="magenta", width=30)
-        
-        for i in range(5):
-            vector_title = vector_results[i]['title'][:27] + "..." if i < len(vector_results) else "-"
-            text_title = text_results[i]['title'][:27] + "..." if i < len(text_results) else "-"
-            hybrid_title = hybrid_results[i]['title'][:27] + "..." if i < len(hybrid_results) else "-"
+        for query_data in self.queries:
+            # Skip if no embedding available
+            if 'embedding' not in query_data:
+                continue
+                
+            user_id = query_data['ground_truth_user_id']
+            embedding = query_data['embedding']
+            query_text = query_data['query_text']
             
-            table.add_row(
-                str(i + 1),
-                vector_title,
-                text_title,
-                hybrid_title
+            # Hybrid search always requires user_id
+            if filter_type == "no_filter":
+                continue
+            
+            # Use SearchEngine class hybrid search
+            start_time = time.time()
+            rows, _ = self.search.hybrid_search_function(
+                user_id=user_id,
+                embedding=embedding,
+                query_text=query_text,
+                limit=limit
             )
+            latency_ms = (time.time() - start_time) * 1000
+            
+            # Check if ground truth was found
+            found_ids = [row['chunk_id'] for row in rows]
+            ground_truth_id = query_data['ground_truth_chunk_id']
+            found = ground_truth_id in found_ids
+            rank = found_ids.index(ground_truth_id) + 1 if found else None
+            
+            results.append(BenchmarkResult(
+                query_id=query_data['query_id'],
+                query_text=query_data['query_text'],
+                latency_ms=latency_ms,
+                result_count=len(rows),
+                filter_type=filter_type,
+                found_ground_truth=found,
+                ground_truth_rank=rank,
+                ground_truth_chunk_id=ground_truth_id
+            ))
         
-        console.print(table)
+        return results
+    
+    def calculate_metrics(self, results: List[BenchmarkResult]) -> Dict:
+        """Calculate metrics from results"""
+        if not results:
+            return {"mean": 0, "median": 0, "stdev": 0, "recall": 0, "precision_at_10": 0}
+        
+        latencies = [r.latency_ms for r in results]
+        found_count = sum(1 for r in results if r.found_ground_truth)
+        total = len(results)
+        
+        # Calculate precision at rank 10
+        precision_count = sum(1 for r in results if r.found_ground_truth and (r.ground_truth_rank or 0) <= 10)
+        
+        return {
+            "mean": mean(latencies),
+            "median": median(latencies),
+            "stdev": stdev(latencies) if len(latencies) > 1 else 0,
+            "recall": (found_count / total * 100) if total > 0 else 0,
+            "precision_at_10": (precision_count / total * 100) if total > 0 else 0,
+            "total_queries": total,
+            "found": found_count
+        }
+    
+    def run(self, limit: int = 10):
+        """Run complete benchmark suite"""
+        self.console.print("\n[bold cyan]Starting Comprehensive Search Benchmark[/bold cyan]\n")
+        self.console.print(f"Running {len(self.queries)} queries for each test...\n")
+        
+        # Test scenarios
+        scenarios = {
+            "vector": ["no_filter", "user_only", "user_jsonb", "user_jsonb_complex"],
+            "text": ["no_filter", "user_only"],
+            "hybrid": ["user_only"]  # Hybrid requires user_id
+        }
+        
+        all_results = {}
+        
+        # Run benchmarks for each search type
+        for search_type, filter_types in scenarios.items():
+            self.console.print(f"\n[cyan]Benchmarking {search_type.upper()} search...[/cyan]")
+            all_results[search_type] = {}
+            
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=self.console
+            ) as progress:
+                task = progress.add_task(f"Running {search_type} benchmarks...", total=len(filter_types))
+                
+                for filter_type in filter_types:
+                    if search_type == "vector":
+                        results = self.benchmark_vector_search(filter_type, limit)
+                    elif search_type == "text":
+                        results = self.benchmark_text_search(filter_type, limit)
+                    else:  # hybrid
+                        results = self.benchmark_hybrid_search(filter_type, limit)
+                    
+                    all_results[search_type][filter_type] = results
+                    progress.advance(task)
+        
+        # Display results
+        self.display_results(all_results)
+        
+        # Save detailed results
+        self.save_results(all_results)
+    
+    def display_results(self, all_results: Dict):
+        """Display benchmark results in tables"""
+        
+        # Performance metrics table
+        self.console.print("\n[bold cyan]Performance Metrics (Latency in ms)[/bold cyan]")
+        perf_table = Table(show_header=True, header_style="bold magenta")
+        perf_table.add_column("Search Type", style="cyan")
+        perf_table.add_column("Filter", style="yellow")
+        perf_table.add_column("Mean", justify="right")
+        perf_table.add_column("Median", justify="right")
+        perf_table.add_column("StdDev", justify="right")
+        
+        for search_type, filter_results in all_results.items():
+            for filter_type, results in filter_results.items():
+                metrics = self.calculate_metrics(results)
+                perf_table.add_row(
+                    search_type.title(),
+                    filter_type.replace("_", " ").title(),
+                    f"{metrics['mean']:.2f}",
+                    f"{metrics['median']:.2f}",
+                    f"{metrics['stdev']:.2f}"
+                )
+        
+        self.console.print(perf_table)
+        
+        # Accuracy metrics table
+        self.console.print("\n[bold cyan]Accuracy Metrics[/bold cyan]")
+        acc_table = Table(show_header=True, header_style="bold magenta")
+        acc_table.add_column("Search Type", style="cyan")
+        acc_table.add_column("Filter", style="yellow")
+        acc_table.add_column("Recall %", justify="right")
+        acc_table.add_column("Precision@10 %", justify="right")
+        acc_table.add_column("Found/Total", justify="right")
+        
+        for search_type, filter_results in all_results.items():
+            for filter_type, results in filter_results.items():
+                metrics = self.calculate_metrics(results)
+                acc_table.add_row(
+                    search_type.title(),
+                    filter_type.replace("_", " ").title(),
+                    f"{metrics['recall']:.1f}",
+                    f"{metrics['precision_at_10']:.1f}",
+                    f"{metrics['found']}/{metrics['total_queries']}"
+                )
+        
+        self.console.print(acc_table)
+    
+    def save_results(self, all_results: Dict):
+        """Save detailed results to CSV"""
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output_file = f"benchmark_results_{timestamp}.csv"
+        
+        with open(output_file, 'w', newline='') as f:
+            fieldnames = ['search_type', 'filter_type', 'query_id', 'query_text', 
+                         'latency_ms', 'found_ground_truth', 'ground_truth_rank']
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            
+            for search_type, filter_results in all_results.items():
+                for filter_type, results in filter_results.items():
+                    for r in results:
+                        writer.writerow({
+                            'search_type': search_type,
+                            'filter_type': filter_type,
+                            'query_id': r.query_id,
+                            'query_text': r.query_text,
+                            'latency_ms': r.latency_ms,
+                            'found_ground_truth': r.found_ground_truth,
+                            'ground_truth_rank': r.ground_truth_rank
+                        })
+        
+        self.console.print(f"\n[green]Detailed results saved to: {output_file}[/green]")
 
 
 def main():
-    """Main benchmark interface"""
-    import argparse
-    
-    parser = argparse.ArgumentParser(description="Benchmark leo-pgvector search")
-    parser.add_argument("--comprehensive", action="store_true", 
-                       help="Run comprehensive benchmark")
-    parser.add_argument("--query", help="Query text for custom benchmark")
-    parser.add_argument("--iterations", type=int, default=5,
-                       help="Number of iterations for benchmarking")
-    parser.add_argument("--limit", type=int, default=10,
-                       help="Result limit")
+    """Main benchmark function"""
+    parser = argparse.ArgumentParser(description="Benchmark search performance with various filters")
+    parser.add_argument("csv_file", type=str, help="Path to benchmark CSV file")
+    parser.add_argument("--json", type=str, help="Path to JSON file with embeddings")
+    parser.add_argument("--limit", type=int, default=10, help="Result limit for searches (default: 10)")
     
     args = parser.parse_args()
     
-    benchmark = SearchBenchmark()
+    # Auto-detect JSON file if not provided
+    json_file = args.json
+    if not json_file:
+        # Try to find matching JSON file
+        csv_path = Path(args.csv_file)
+        json_path = csv_path.with_suffix('.json')
+        if json_path.exists():
+            json_file = str(json_path)
+            Console().print(f"[yellow]Auto-detected embeddings file: {json_file}[/yellow]")
     
-    if args.comprehensive:
-        benchmark.run_comprehensive_benchmark()
-    elif args.query:
-        # For custom query, we need to generate or load an embedding
-        console.print("[yellow]Loading sample embedding for testing...[/yellow]")
-        dataset = load_dataset(
-            "Cohere/wikipedia-22-12-simple-embeddings", 
-            split="train[:1]"
-        )
-        embedding = dataset[0]['emb']
-        
-        console.print(f"\n[bold]Benchmarking query:[/bold] '{args.query}'")
-        results = benchmark.benchmark_search_methods(
-            query_text=args.query,
-            embedding=embedding,
-            iterations=args.iterations,
-            limit=args.limit
-        )
-        benchmark.display_benchmark_results(results)
-    else:
-        console.print("[bold cyan]Leo PGVector Search Benchmark[/bold cyan]\n")
-        console.print("Usage:")
-        console.print("  python bench.py --comprehensive     Run full benchmark suite")
-        console.print("  python bench.py --query 'text'      Benchmark specific query")
-        console.print("\nOptions:")
-        console.print("  --iterations N    Number of iterations (default: 5)")
-        console.print("  --limit N         Result limit (default: 10)")
+    try:
+        benchmark = SearchBenchmark(csv_file=args.csv_file, json_file=json_file)
+        benchmark.run(limit=args.limit)
+    except Exception as e:
+        Console().print(f"[bold red]Error:[/bold red] {e}")
+        import traceback
+        traceback.print_exc()
 
 
 if __name__ == "__main__":
