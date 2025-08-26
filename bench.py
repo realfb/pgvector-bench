@@ -428,7 +428,12 @@ class SearchBenchmark:
     def save_results(self, all_results: Dict):
         """Save detailed results to CSV"""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = f"benchmark_results_{timestamp}.csv"
+        
+        # Create sql-out directory if it doesn't exist
+        output_dir = Path("sql-out")
+        output_dir.mkdir(exist_ok=True)
+        
+        output_file = output_dir / f"benchmark_results_{timestamp}.csv"
         
         with open(output_file, 'w', newline='') as f:
             fieldnames = ['search_type', 'filter_type', 'query_id', 'query_text', 

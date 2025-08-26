@@ -1,0 +1,93 @@
+================================================================================
+TEXT SEARCH QUERY ANALYSIS
+================================================================================
+Generated: 2025-08-26 18:40:47
+
+
+================================================================================
+Query: Text No Filter
+================================================================================
+
+PERFORMANCE SUMMARY:
+Total Time:     120.763 ms
+Execution Time: 113.607 ms
+Planning Time:  7.156 ms
+Rows Returned:  10
+Total Cost:     1266.49
+
+PARAMETERS:
+  query: machine learning
+  limit: 10
+
+SQL QUERY:
+----------------------------------------
+SELECT id, user_document_id,
+ts_rank_cd(text_search_vector, websearch_to_tsquery('english', :query)) AS relevance
+FROM user_document_chunks
+WHERE websearch_to_tsquery('english', :query) @@ text_search_vector
+ORDER BY relevance DESC
+LIMIT :limit
+
+EXECUTION PLAN:
+----------------------------------------
+Limit (cost=1266.46..1266.49 rows=10 width=12) (actual time=113.469..113.471 rows=10 loops=1)
+  Buffers: shared hit=45 read=371
+  Sort (cost=1266.46..1266.51 rows=18 width=12) (actual time=113.466..113.467 rows=10 loops=1)
+    Sort Key: (ts_rank_cd(text_search_vector, '''machin'' & ''learn'''::tsquery)) DESC
+    Sort Method: top-N heapsort  Memory: 25kB
+    Buffers: shared hit=45 read=371
+    Bitmap Heap Scan on user_document_chunks (cost=1194.67..1266.09 rows=18 width=12) (actual time=84.014..113.400 rows=75 loops=1)
+      Buffers: shared hit=42 read=371
+      Bitmap Index Scan using idx_chunks_text_search_gin (cost=0.00..1194.66 rows=18 width=0) (actual time=83.602..83.602 rows=75 loops=1)
+        Index Cond: (text_search_vector @@ '''machin'' & ''learn'''::tsquery)
+        Buffers: shared hit=3 read=281
+Planning:
+  Buffers: shared hit=51
+Planning Time: 7.156 ms
+Execution Time: 113.607 ms
+
+
+================================================================================
+Query: Text User Filter
+================================================================================
+
+PERFORMANCE SUMMARY:
+Total Time:     0.249 ms
+Execution Time: 0.109 ms
+Planning Time:  0.140 ms
+Rows Returned:  0
+Total Cost:     16.49
+
+PARAMETERS:
+  user_id: 9712
+  query: machine learning
+  limit: 10
+
+SQL QUERY:
+----------------------------------------
+SELECT id, user_document_id,
+ts_rank_cd(text_search_vector, websearch_to_tsquery('english', :query)) AS relevance
+FROM user_document_chunks
+WHERE user_id = :user_id
+AND websearch_to_tsquery('english', :query) @@ text_search_vector
+ORDER BY relevance DESC
+LIMIT :limit
+
+EXECUTION PLAN:
+----------------------------------------
+Limit (cost=16.48..16.49 rows=1 width=12) (actual time=0.095..0.096 rows=0 loops=1)
+  Buffers: shared hit=52 read=0
+  Sort (cost=16.48..16.49 rows=1 width=12) (actual time=0.094..0.094 rows=0 loops=1)
+    Sort Key: (ts_rank_cd(text_search_vector, '''machin'' & ''learn'''::tsquery)) DESC
+    Sort Method: quicksort  Memory: 25kB
+    Buffers: shared hit=52 read=0
+    Index Scan using ix_user_document_chunks_user_id (cost=0.42..16.47 rows=1 width=12) (actual time=0.091..0.091 rows=0 loops=1)
+      Index Cond: (user_id = 9712)
+      Filter: ('''machin'' & ''learn'''::tsquery @@ text_search_vector)
+      Rows Removed by Filter: 114
+      Buffers: shared hit=52 read=0
+Planning:
+  Buffers: shared hit=1
+Planning Time: 0.140 ms
+Execution Time: 0.109 ms
+

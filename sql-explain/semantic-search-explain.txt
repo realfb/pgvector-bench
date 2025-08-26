@@ -1,0 +1,175 @@
+================================================================================
+SEMANTIC/VECTOR SEARCH QUERY ANALYSIS
+================================================================================
+Generated: 2025-08-26 18:40:47
+
+
+================================================================================
+Query: Vector No Filter
+================================================================================
+
+PERFORMANCE SUMMARY:
+Total Time:     356.956 ms
+Execution Time: 356.863 ms
+Planning Time:  0.093 ms
+Rows Returned:  10
+Total Cost:     3131.20
+
+PARAMETERS:
+  embedding: [768-dimensional vector]
+  limit: 10
+
+SQL QUERY:
+----------------------------------------
+SELECT id, user_document_id, embedding <#> :embedding ::vector AS distance
+FROM user_document_chunks
+ORDER BY embedding <#> :embedding ::vector
+LIMIT :limit
+
+EXECUTION PLAN:
+----------------------------------------
+Limit (cost=3105.03..3131.20 rows=10 width=16) (actual time=350.259..356.845 rows=10 loops=1)
+  Buffers: shared hit=168 read=1968
+  Index Scan using idx_chunks_embedding_hnsw (cost=3105.03..1274525.18 rows=485859 width=16) (actual time=350.258..356.842 rows=10 loops=1)
+    Buffers: shared hit=168 read=1968
+Planning:
+  Buffers: shared hit=10
+Planning Time: 0.093 ms
+Execution Time: 356.863 ms
+
+
+================================================================================
+Query: Vector User Filter
+================================================================================
+
+PERFORMANCE SUMMARY:
+Total Time:     15.971 ms
+Execution Time: 15.894 ms
+Planning Time:  0.077 ms
+Rows Returned:  10
+Total Cost:     17.62
+
+PARAMETERS:
+  user_id: 9712
+  embedding: [768-dimensional vector]
+  limit: 10
+
+SQL QUERY:
+----------------------------------------
+SELECT id, user_document_id, embedding <#> :embedding ::vector AS distance
+FROM user_document_chunks
+WHERE user_id = :user_id
+ORDER BY embedding <#> :embedding ::vector
+LIMIT :limit
+
+EXECUTION PLAN:
+----------------------------------------
+Limit (cost=17.59..17.62 rows=10 width=16) (actual time=15.882..15.884 rows=10 loops=1)
+  Buffers: shared hit=424 read=56
+  Sort (cost=17.59..17.72 rows=52 width=16) (actual time=15.881..15.882 rows=10 loops=1)
+    Sort Key: ((embedding <#> '[0.42443454,0.020358916,-0.45028132,-0.12645574,0.090501845,0.36130738,0.20027308,-...
+    Sort Method: top-N heapsort  Memory: 25kB
+    Buffers: shared hit=424 read=56
+    Index Scan using ix_user_document_chunks_user_id (cost=0.42..16.47 rows=52 width=16) (actual time=0.031..15.859 rows=114 loops=1)
+      Index Cond: (user_id = 9712)
+      Buffers: shared hit=424 read=56
+Planning:
+  Buffers: shared hit=1
+Planning Time: 0.077 ms
+Execution Time: 15.894 ms
+
+
+================================================================================
+Query: Vector User Jsonb Simple
+================================================================================
+
+PERFORMANCE SUMMARY:
+Total Time:     0.377 ms
+Execution Time: 0.268 ms
+Planning Time:  0.109 ms
+Rows Returned:  10
+Total Cost:     17.01
+
+PARAMETERS:
+  user_id: 9712
+  embedding: [768-dimensional vector]
+  position: middle
+  has_code: False
+  limit: 10
+
+SQL QUERY:
+----------------------------------------
+SELECT id, user_document_id, embedding <#> :embedding ::vector AS distance
+FROM user_document_chunks
+WHERE user_id = :user_id
+AND meta->>'position' = :position
+AND (meta->>'has_code')::boolean = :has_code
+ORDER BY embedding <#> :embedding ::vector
+LIMIT :limit
+
+EXECUTION PLAN:
+----------------------------------------
+Limit (cost=17.00..17.01 rows=1 width=16) (actual time=0.256..0.257 rows=10 loops=1)
+  Buffers: shared hit=328 read=0
+  Sort (cost=17.00..17.01 rows=1 width=16) (actual time=0.255..0.256 rows=10 loops=1)
+    Sort Key: ((embedding <#> '[0.42443454,0.020358916,-0.45028132,-0.12645574,0.090501845,0.36130738,0.20027308,-...
+    Sort Method: top-N heapsort  Memory: 25kB
+    Buffers: shared hit=328 read=0
+    Index Scan using ix_user_document_chunks_user_id (cost=0.42..16.99 rows=1 width=16) (actual time=0.028..0.244 rows=76 loops=1)
+      Index Cond: (user_id = 9712)
+      Filter: (((meta ->> 'position'::text) = 'middle'::text) AND (NOT ((meta ->> 'has_code'::text))::boolean))
+      Rows Removed by Filter: 38
+      Buffers: shared hit=328 read=0
+Planning:
+  Buffers: shared hit=15
+Planning Time: 0.109 ms
+Execution Time: 0.268 ms
+
+
+================================================================================
+Query: Vector User Jsonb Complex
+================================================================================
+
+PERFORMANCE SUMMARY:
+Total Time:     0.326 ms
+Execution Time: 0.248 ms
+Planning Time:  0.078 ms
+Rows Returned:  10
+Total Cost:     17.66
+
+PARAMETERS:
+  user_id: 9712
+  embedding: [768-dimensional vector]
+  min_complexity: 3.0
+  max_complexity: 7.0
+  limit: 10
+
+SQL QUERY:
+----------------------------------------
+SELECT id, user_document_id, embedding <#> :embedding ::vector AS distance
+FROM user_document_chunks
+WHERE user_id = :user_id
+AND (meta->>'complexity_score')::float >= :min_complexity
+AND (meta->>'complexity_score')::float <= :max_complexity
+AND meta->>'language_detected' = 'en'
+ORDER BY embedding <#> :embedding ::vector
+LIMIT :limit
+
+EXECUTION PLAN:
+----------------------------------------
+Limit (cost=17.65..17.66 rows=1 width=16) (actual time=0.238..0.240 rows=10 loops=1)
+  Buffers: shared hit=244 read=0
+  Sort (cost=17.65..17.66 rows=1 width=16) (actual time=0.238..0.238 rows=10 loops=1)
+    Sort Key: ((embedding <#> '[0.42443454,0.020358916,-0.45028132,-0.12645574,0.090501845,0.36130738,0.20027308,-...
+    Sort Method: top-N heapsort  Memory: 25kB
+    Buffers: shared hit=244 read=0
+    Index Scan using ix_user_document_chunks_user_id (cost=0.42..17.64 rows=1 width=16) (actual time=0.039..0.229 rows=55 loops=1)
+      Index Cond: (user_id = 9712)
+      Filter: (((meta ->> 'language_detected'::text) = 'en'::text) AND (((meta ->> 'complexity_score'::text))::double precision >= '3'::double precision) AND (((meta ->> 'complexity_score'::text))::double precision <= '7'::double precision))
+      Rows Removed by Filter: 59
+      Buffers: shared hit=244 read=0
+Planning:
+  Buffers: shared hit=3
+Planning Time: 0.078 ms
+Execution Time: 0.248 ms
+

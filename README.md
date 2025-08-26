@@ -20,6 +20,8 @@ A production-ready implementation of hybrid search combining vector similarity s
 - Python 3.12+
 - Docker and Docker Compose
 - 4GB+ RAM for dataset processing
+- Google API Key (for Gemini query generation)
+- Cohere API Key (for embedding generation)
 
 ## Installation
 
@@ -51,8 +53,10 @@ docker ps
 
 4. **Configure environment**:
 ```bash
-# The .env file is already configured for Docker
-# DATABASE_URL=postgresql://postgres:postgres@localhost:54320/leo_pgvector
+# Create .env file with your configuration
+DATABASE_URL=postgresql://postgres:postgres@localhost:54320/leo_pgvector
+GOOGLE_API_KEY=your_google_api_key  # For Gemini query generation
+COHERE_API_KEY=your_cohere_api_key  # For embeddings
 ```
 
 ## Project Structure
@@ -62,6 +66,19 @@ leo-pgvector/
 ...
 ```
 
+
+## Additional Project Files
+
+```
+   bench.py            # Performance benchmarking script
+   pre-bench.py        # Generate benchmark data with LLMs
+   analyze_queries.py  # SQL EXPLAIN ANALYZE tool
+   llm.py              # Google Gemini client for query generation
+   embedding.py        # Cohere client for embeddings
+   data/               # Benchmark data storage
+   sql-out/            # Benchmark results
+   sql-explain/        # Query analysis results
+```
 
 ## File Descriptions
 
@@ -82,15 +99,31 @@ Data validation and serialization schemas:
 ### `setup.py`
 Database initialization and data ingestion:
 - Creates pgvector extension and RRF function
-- Sets up tables and indexes
+- Sets up denormalized schema with user_id in chunks table
+- Creates optimized indexes (HNSW, GIN, B-tree)
 - Downloads Cohere Wikipedia dataset
 - Populates database with users and documents
 
+### `bench.py`
+Comprehensive benchmarking tool:
+- Tests vector, text, and hybrid search
+- Evaluates with different filtering scenarios
+- Measures latency and recall/precision
+- Saves results to sql-out/ directory
+
+### `analyze_queries.py`
+SQL query performance analysis:
+- Runs EXPLAIN ANALYZE BUFFERS on all query patterns
+- Generates detailed execution plans
+- Saves analysis to sql-explain/ directory
+- Creates individual files for text, semantic, and hybrid queries
+
 ### `query.py`
 Search implementation with three modes:
-- **Semantic Search**: Vector similarity using cosine distance
+- **Semantic Search**: Vector similarity using negative inner product
 - **Keyword Search**: Full-text search with ts_rank_cd
 - **Hybrid Search**: RRF combination of both methods
+- **User Filtering**: All searches require user_id for multi-tenant isolation
 
 ## Usage
 
@@ -194,30 +227,37 @@ for item in enriched_results:
 
 ### 4. Performance Benchmarking
 
-#### Standard Performance Benchmark
+#### Generate Benchmark Data with LLMs
 ```bash
-# Run comprehensive benchmark with default settings (20 queries per test)
-python bench.py
+# Generate challenging queries using Google Gemini and Cohere embeddings
+python pre-bench.py --users 25 --queries 2
+# Creates: data/benchmark_TIMESTAMP.csv and .json with real embeddings
+```
 
-# Run with more queries for more accurate results
-python bench.py --queries 50
-
-# Run with fewer queries for quick testing
-python bench.py --queries 5
+#### Run Performance Benchmark
+```bash
+# Run benchmark with generated data
+python bench.py data/benchmark_TIMESTAMP.csv --limit 10
 
 # The benchmark tests:
 #   - No Filter: Baseline performance without any filtering
-#   - User Only: Performance with user_id filtering
-#   - User + Attributes: Additional filtering on regular columns
+#   - User Only: Performance with user_id filtering  
 #   - User + JSONB: Additional filtering on JSONB metadata
-#   - User + All Filters: Combined filtering scenarios
+#   - User + JSONB Complex: Complex JSONB filtering
 #
-# Results include:
-#   - Mean, median, min, max latencies
-#   - Standard deviation
-#   - P95 and P99 percentiles
-#   - Comparison across vector, text, and hybrid search
-#   - Results saved to sql-out/benchmark_results_TIMESTAMP.json
+# Results saved to sql-out/benchmark_results_TIMESTAMP.csv
+```
+
+#### Analyze Query Performance
+```bash
+# Generate EXPLAIN ANALYZE reports for all query patterns
+python analyze_queries.py
+
+# Creates in sql-explain/:
+#   - query_analysis_TIMESTAMP.txt (comprehensive report)
+#   - text-search-explain.txt
+#   - semantic-search-explain.txt
+#   - hybrid-search-explain.txt
 ```
 
 #### Recall/Precision Evaluation
@@ -327,16 +367,48 @@ stats = ingestion.run()
 - **O(1) Lookup**: Efficient mapping structure for chunk-to-document association
 - **Performance**: Optimized for multiple chunks from same document (common in search results)
 
-## Performance Tuning
+## Performance Optimization Results
+
+### Denormalization Impact
+Eliminated JOINs by adding user_id directly to chunks table:
+- **5-35x faster** queries compared to JOIN-based approach
+- No backward compatibility overhead - fresh schema design
+
+### Current Performance Metrics (470K vectors, 25 users)
+```
+┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━┳━━━━━━━━┓
+┃ Search Type ┃ Filter             ┃   Mean ┃ Median ┃ StdDev ┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━╇━━━━━━━━┩
+│ Vector      │ No Filter          │ 165.48 │ 142.26 │  84.34 │
+│ Vector      │ User Only          │  13.06 │   6.38 │  17.84 │
+│ Vector      │ User + JSONB       │   0.68 │   0.65 │   0.23 │
+│ Text        │ No Filter          │   8.52 │   4.53 │  16.42 │
+│ Text        │ User Only          │   1.04 │   0.87 │   0.81 │
+│ Hybrid      │ User Only          │   2.32 │   2.09 │   0.84 │
+└─────────────┴────────────────────┴────────┴────────┴────────┘
+```
+
+### HNSW Index Optimization
+After tuning HNSW parameters:
+- Set `ef_search = 100` (was 40)
+- Rebuilt index with `m = 16, ef_construction = 64`
+- **Result**: Vector search improved from 300ms → 165ms (1.8x faster)
 
 ### Index Parameters
 ```python
 IndexConfig(
     hnsw_m=16,                  # HNSW connections
-    hnsw_ef_construction=256,   # Build quality
+    hnsw_ef_construction=64,    # Build quality
+    hnsw_ef_search=100,         # Query-time quality
     text_dictionary="english"   # Language dictionary
 )
 ```
+
+### Key Insights
+- **User filtering**: 22x faster than no filter
+- **JSONB filtering**: 240x faster than no filter (sub-millisecond)
+- **Hybrid search**: Consistently ~2ms with user filtering
+- **Text search**: Sub-millisecond with GIN index
 
 ### Search Parameters
 - `search_depth`: Results per method before RRF (default: 40)
