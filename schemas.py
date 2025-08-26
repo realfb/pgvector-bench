@@ -79,6 +79,8 @@ class SearchResult:
     score: float
     vector_rank: Optional[int] = None
     text_rank: Optional[int] = None
+    k_score: Optional[float] = None  # Keyword search score
+    v_score: Optional[float] = None  # Vector search score
     
     def to_dict(self) -> dict:
         """Convert to dictionary for JSON serialization"""
@@ -89,7 +91,9 @@ class SearchResult:
             'text': self.text,
             'score': self.score,
             'vector_rank': self.vector_rank,
-            'text_rank': self.text_rank
+            'text_rank': self.text_rank,
+            'k_score': self.k_score,
+            'v_score': self.v_score
         }
 
 

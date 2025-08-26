@@ -87,7 +87,7 @@ class UserDocumentChunk(Base):
             "embedding",
             postgresql_using="hnsw",
             postgresql_with={"m": 16, "ef_construction": 256},
-            postgresql_ops={"embedding": "vector_ip_ops"},  # Changed to inner product
+            postgresql_ops={"embedding": "vector_ip_ops"},
         ),
         Index("idx_chunks_meta_gin", "meta", postgresql_using="gin"),
     )
@@ -127,63 +127,61 @@ CREATE OR REPLACE FUNCTION hybrid_search(
     query_text text,
     query_embedding vector(768),
     match_count int,
-    search_user_id int DEFAULT NULL,
     full_text_weight float DEFAULT 1,
     semantic_weight float DEFAULT 1,
     rrf_k int DEFAULT 50
 )
-RETURNS TABLE(
-    chunk_id int,
-    document_id int,
-    user_id int,
-    title text,
+RETURNS TABLE (
+    id int,
+    user_document_id int,
+    paragraph_id int,
     text text,
     meta jsonb,
+    created_at timestamp with time zone,
+    k_score float,
+    v_score float,
     score float
 )
 LANGUAGE SQL
 AS $$
 WITH full_text AS (
     SELECT 
-        c.id,
+        id,
         -- Note: ts_rank_cd is not indexable but will only rank matches of the where clause
         -- which shouldn't be too big
         row_number() OVER (
-            ORDER BY ts_rank_cd(c.text_search_vector, websearch_to_tsquery('english', query_text)) DESC
+            ORDER BY ts_rank_cd(text_search_vector, websearch_to_tsquery(query_text)) DESC
         ) as rank_ix
-    FROM user_document_chunks c
-    JOIN user_documents d ON c.user_document_id = d.id
-    WHERE 
-        c.text_search_vector @@ websearch_to_tsquery('english', query_text)
-        AND (search_user_id IS NULL OR d.user_id = search_user_id)
+    FROM user_document_chunks
+    WHERE text_search_vector @@ websearch_to_tsquery(query_text)
     ORDER BY rank_ix
     LIMIT LEAST(match_count, 30) * 2
 ),
 semantic AS (
     SELECT 
-        c.id,
-        row_number() OVER (ORDER BY c.embedding <#> query_embedding) as rank_ix
-    FROM user_document_chunks c
-    JOIN user_documents d ON c.user_document_id = d.id
-    WHERE (search_user_id IS NULL OR d.user_id = search_user_id)
+        id,
+        row_number() OVER (ORDER BY embedding <#> query_embedding) as rank_ix
+    FROM user_document_chunks
     ORDER BY rank_ix
     LIMIT LEAST(match_count, 30) * 2
 )
 SELECT 
-    c.id as chunk_id,
-    d.id as document_id,
-    d.user_id,
-    d.title,
-    c.text,
-    c.meta,
+    user_document_chunks.id,
+    user_document_chunks.user_document_id,
+    user_document_chunks.paragraph_id,
+    user_document_chunks.text,
+    user_document_chunks.meta,
+    user_document_chunks.created_at,
+    COALESCE(1.0 / (rrf_k + full_text.rank_ix), 0.0) * full_text_weight AS k_score,
+    COALESCE(1.0 / (rrf_k + semantic.rank_ix), 0.0) * semantic_weight AS v_score,
     COALESCE(1.0 / (rrf_k + full_text.rank_ix), 0.0) * full_text_weight +
-    COALESCE(1.0 / (rrf_k + semantic.rank_ix), 0.0) * semantic_weight as score
+    COALESCE(1.0 / (rrf_k + semantic.rank_ix), 0.0) * semantic_weight AS score
 FROM 
     full_text
     FULL OUTER JOIN semantic ON full_text.id = semantic.id
-    JOIN user_document_chunks c ON COALESCE(full_text.id, semantic.id) = c.id
-    JOIN user_documents d ON c.user_document_id = d.id
-ORDER BY score DESC
+    JOIN user_document_chunks ON COALESCE(full_text.id, semantic.id) = user_document_chunks.id
+ORDER BY 
+    score DESC
 LIMIT LEAST(match_count, 30)
 $$;
 """)

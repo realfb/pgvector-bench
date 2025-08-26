@@ -6,15 +6,13 @@ import os
 import time
 from typing import List, Optional, Dict, Any
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker
 from rich import print
 from rich.console import Console
 from rich.table import Table
 from dotenv import load_dotenv
 import numpy as np
 
-from models import User, UserDocument, UserDocumentChunk
-from schemas import SearchResult, SearchType, SearchRequest, SearchResponse, DatabaseConfig
+from schemas import SearchResult, SearchType, SearchRequest, SearchResponse
 
 load_dotenv()
 
@@ -25,32 +23,40 @@ class SearchEngine:
     Implements best practices including RRF scoring.
     """
 
-    def __init__(self, db_url: Optional[str] = None):
+    def __init__(self, db_url: Optional[str] = None, use_pooling: bool = True):
         if db_url is None:
             db_url = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/leo_pgvector")
 
-        self.engine = create_engine(db_url, echo=False)
-        self.SessionLocal = sessionmaker(bind=self.engine)
+        if use_pooling:
+            # Use connection pooling for better performance
+            self.engine = create_engine(
+                db_url, 
+                echo=False,
+                pool_size=5,           # Number of connections to maintain in pool
+                max_overflow=10,       # Maximum overflow connections
+                pool_pre_ping=True,    # Test connections before using
+                pool_recycle=3600     # Recycle connections after 1 hour
+            )
+        else:
+            self.engine = create_engine(db_url, echo=False)
 
     def hybrid_search_function(
         self,
         embedding: List[float],
         query_text: str,
         limit: int = 10,
-        user_id: Optional[int] = None,
         full_text_weight: float = 1.0,
         semantic_weight: float = 1.0,
         rrf_k: int = 50,
     ) -> tuple[List[Dict[str, Any]], float]:
         """
-        Execute hybrid search using stored database function.
-        More efficient than building SQL in Python.
+        Execute hybrid search using the stored database function defined in models.py.
+        This is the primary hybrid search implementation.
 
         Args:
             embedding: Query embedding vector (768-dimensional)
             query_text: Search query text
             limit: Maximum number of results
-            user_id: Optional user ID filter
             full_text_weight: Weight for full-text search results
             semantic_weight: Weight for semantic search results
             rrf_k: RRF smoothing constant
@@ -60,17 +66,16 @@ class SearchEngine:
         """
         start_time = time.time()
         
-        with self.SessionLocal() as session:
+        with self.engine.connect() as conn:
             # Convert embedding to PostgreSQL array format
             embedding_str = "[" + ",".join(map(str, embedding)) + "]"
 
-            result = session.execute(
+            result = conn.execute(
                 text("""
                     SELECT * FROM hybrid_search(
                         :query_text,
                         :embedding ::vector(768),
                         :limit,
-                        :user_id,
                         :full_text_weight,
                         :semantic_weight,
                         :rrf_k
@@ -80,7 +85,6 @@ class SearchEngine:
                     "query_text": query_text,
                     "embedding": embedding_str,
                     "limit": limit,
-                    "user_id": user_id,
                     "full_text_weight": full_text_weight,
                     "semantic_weight": semantic_weight,
                     "rrf_k": rrf_k,
@@ -89,13 +93,15 @@ class SearchEngine:
 
             results = [
                 {
-                    "chunk_id": row[0],
-                    "document_id": row[1],
-                    "user_id": row[2],
-                    "title": row[3],
-                    "text": row[4],
-                    "meta": row[5],
-                    "score": row[6],
+                    "chunk_id": row[0],  # id
+                    "document_id": row[1],  # user_document_id
+                    "paragraph_id": row[2],  # paragraph_id
+                    "text": row[3],  # text
+                    "meta": row[4],  # meta
+                    "created_at": row[5],  # created_at
+                    "k_score": row[6],  # keyword score
+                    "v_score": row[7],  # vector score
+                    "score": row[8],  # combined score
                 }
                 for row in result
             ]
@@ -123,39 +129,28 @@ class SearchEngine:
             # Convert embedding to PostgreSQL vector format
             embedding_str = "[" + ",".join(map(str, embedding)) + "]"
 
-            # Simple query matching reference implementation style
-            base_query = """
-                SELECT 
-                    c.id as chunk_id,
-                    c.user_document_id as document_id,
-                    c.text,
-                    c.paragraph_id,
-                    d.title,
-                    d.url,
-                    d.wiki_id,
-                    row_number() OVER (ORDER BY c.embedding <#> :embedding ::vector) AS rank,
-                    c.embedding <#> :embedding ::vector AS distance
-                FROM user_document_chunks c
-                JOIN user_documents d ON c.user_document_id = d.id
-            """
-
+            # Simplified query - just get everything from chunks table
             if user_id:
-                query = text(
-                    base_query
-                    + """
-                    WHERE d.user_id = :user_id
-                    ORDER BY rank
+                query = text("""
+                    SELECT 
+                        *,
+                        embedding <#> :embedding ::vector AS distance
+                    FROM user_document_chunks
+                    WHERE user_document_id IN (
+                        SELECT id FROM user_documents WHERE user_id = :user_id
+                    )
+                    ORDER BY embedding <#> :embedding ::vector
                     LIMIT :limit
-                """
-                )
+                """)
             else:
-                query = text(
-                    base_query
-                    + """
-                    ORDER BY rank
+                query = text("""
+                    SELECT 
+                        *,
+                        embedding <#> :embedding ::vector AS distance
+                    FROM user_document_chunks
+                    ORDER BY embedding <#> :embedding ::vector
                     LIMIT :limit
-                """
-                )
+                """)
 
             params = {"embedding": embedding_str, "limit": limit}
             if user_id:
@@ -185,48 +180,37 @@ class SearchEngine:
         start_time = time.time()
         
         with self.engine.connect() as conn:
-            # Simple query matching reference implementation style
-            base_query = """
-                SELECT
-                    c.id as chunk_id,
-                    c.user_document_id as document_id,
-                    c.text,
-                    c.paragraph_id,
-                    d.title,
-                    d.url,
-                    d.wiki_id,
-                    row_number() OVER (
-                        ORDER BY ts_rank_cd(
-                            c.text_search_vector, 
-                            websearch_to_tsquery('english', :query)
-                        ) DESC
-                    ) AS rank,
-                    ts_rank_cd(
-                        c.text_search_vector, 
-                        websearch_to_tsquery('english', :query)
-                    ) AS relevance
-                FROM user_document_chunks c
-                JOIN user_documents d ON c.user_document_id = d.id
-                WHERE websearch_to_tsquery('english', :query) @@ c.text_search_vector
-            """
-
+            # Simplified query - just get everything from chunks table
             if user_id:
-                query = text(
-                    base_query
-                    + """
-                    AND d.user_id = :user_id
-                    ORDER BY rank
+                query = text("""
+                    SELECT
+                        *,
+                        ts_rank_cd(
+                            text_search_vector, 
+                            websearch_to_tsquery('english', :query)
+                        ) AS relevance
+                    FROM user_document_chunks
+                    WHERE 
+                        websearch_to_tsquery('english', :query) @@ text_search_vector
+                        AND user_document_id IN (
+                            SELECT id FROM user_documents WHERE user_id = :user_id
+                        )
+                    ORDER BY relevance DESC
                     LIMIT :limit
-                """
-                )
+                """)
             else:
-                query = text(
-                    base_query
-                    + """
-                    ORDER BY rank
+                query = text("""
+                    SELECT
+                        *,
+                        ts_rank_cd(
+                            text_search_vector, 
+                            websearch_to_tsquery('english', :query)
+                        ) AS relevance
+                    FROM user_document_chunks
+                    WHERE websearch_to_tsquery('english', :query) @@ text_search_vector
+                    ORDER BY relevance DESC
                     LIMIT :limit
-                """
-                )
+                """)
 
             params = {"query": query_text, "limit": limit}
             if user_id:
@@ -238,198 +222,72 @@ class SearchEngine:
         latency_ms = (time.time() - start_time) * 1000
         return results, latency_ms
 
-    def hybrid_search_sql(
-        self,
-        embedding: List[float],
-        query_text: str,
-        limit: int = 10,
-        search_depth: int = 40,
-        rrf_k: int = 50,
-        user_id: Optional[int] = None,
-    ) -> List[Dict[str, Any]]:
+    def execute_search(self, request: SearchRequest) -> List[SearchResult]:
         """
-        SQL-based hybrid search matching the article's exact approach.
-        Uses UNION ALL to combine vector and text search with RRF scoring.
-        """
-        with self.engine.connect() as conn:
-            embedding_str = "[" + ",".join(map(str, embedding)) + "]"
-
-            user_filter = ""
-            if user_id:
-                user_filter = f"AND d.user_id = {user_id}"
-
-            # Using inline RRF calculation like Supabase article
-            query = text(
-                """
-                WITH semantic AS (
-                    SELECT
-                        c.id,
-                        row_number() OVER (ORDER BY c.embedding <#> :embedding ::vector) AS rank_ix
-                    FROM user_document_chunks c
-                    JOIN user_documents d ON c.user_document_id = d.id
-                    WHERE 1=1 """
-                + user_filter
-                + """
-                    ORDER BY rank_ix
-                    LIMIT :search_depth
-                ),
-                full_text AS (
-                    SELECT
-                        c.id,
-                        row_number() OVER (
-                            ORDER BY ts_rank_cd(
-                                c.text_search_vector,
-                                websearch_to_tsquery('english', :query)
-                            ) DESC
-                        ) AS rank_ix
-                    FROM user_document_chunks c
-                    JOIN user_documents d ON c.user_document_id = d.id
-                    WHERE 
-                        websearch_to_tsquery('english', :query) @@ c.text_search_vector
-                        """
-                + user_filter
-                + """
-                    ORDER BY rank_ix
-                    LIMIT :search_depth
-                )
-                SELECT
-                    c.id as chunk_id,
-                    d.id as document_id,
-                    d.title,
-                    c.text,
-                    COALESCE(1.0 / (:rrf_k + semantic.rank_ix), 0.0) +
-                    COALESCE(1.0 / (:rrf_k + full_text.rank_ix), 0.0) AS score
-                FROM
-                    semantic
-                    FULL OUTER JOIN full_text ON semantic.id = full_text.id
-                    JOIN user_document_chunks c ON COALESCE(semantic.id, full_text.id) = c.id
-                    JOIN user_documents d ON c.user_document_id = d.id
-                ORDER BY score DESC
-                LIMIT :limit
-            """
-            )
-
-            result = conn.execute(
-                query,
-                {
-                    "embedding": embedding_str,
-                    "query": query_text,
-                    "search_depth": search_depth,
-                    "rrf_k": rrf_k,
-                    "limit": limit,
-                },
-            )
-
-            return [dict(row._mapping) for row in result]
-
-    def hybrid_search(self, request: SearchRequest) -> List[SearchResult]:
-        """
-        Perform hybrid search combining semantic and keyword search with RRF scoring.
+        Execute search request by routing to appropriate search method.
 
         Args:
             request: SearchRequest object with query parameters
 
         Returns:
-            List of SearchResult objects sorted by combined RRF score
+            List of SearchResult objects
         """
-        # Validate request
-        if request.search_type == SearchType.SEMANTIC and not request.embedding:
-            raise ValueError("Semantic search requires an embedding")
-
-        if request.search_type == SearchType.KEYWORD and not request.query_text:
-            raise ValueError("Keyword search requires query_text")
-
-        if request.search_type == SearchType.HYBRID:
-            if not request.embedding or not request.query_text:
-                raise ValueError("Hybrid search requires both embedding and query_text")
-
-        # Perform searches based on type
+        # Route to appropriate search method based on type
         if request.search_type == SearchType.SEMANTIC:
+            if not request.embedding:
+                raise ValueError("Semantic search requires an embedding")
             vector_results, _ = self.vector_search(request.embedding, request.limit, request.user_id)
             return self._process_single_search_results(vector_results, "semantic")
 
         elif request.search_type == SearchType.KEYWORD:
+            if not request.query_text:
+                raise ValueError("Keyword search requires query_text")
             text_results, _ = self.text_search(request.query_text, request.limit, request.user_id)
             return self._process_single_search_results(text_results, "keyword")
 
         else:  # HYBRID
-            # Perform both searches
-            vector_results, _ = self.vector_search(request.embedding, request.search_depth, request.user_id)
-            text_results, _ = self.text_search(request.query_text, request.search_depth, request.user_id)
-
-            # Combine with RRF
-            return self._combine_results_rrf(vector_results, text_results, request.rrf_k, request.limit)
+            if not request.embedding or not request.query_text:
+                raise ValueError("Hybrid search requires both embedding and query_text")
+            
+            # Use the database hybrid search function directly
+            results, _ = self.hybrid_search_function(
+                embedding=request.embedding,
+                query_text=request.query_text,
+                limit=request.limit,
+                user_id=request.user_id,
+                rrf_k=request.rrf_k
+            )
+            
+            # Process results into SearchResult objects
+            search_results = []
+            for r in results:
+                search_results.append(SearchResult(
+                    chunk_id=r['chunk_id'],
+                    document_id=r['document_id'],
+                    title="",  # Title fetched separately if needed
+                    text=self._truncate_text(r['text'], 200),
+                    score=r['score']
+                ))
+            return search_results
 
     def _process_single_search_results(self, results: List[Dict], search_type: str) -> List[SearchResult]:
         """Process results from a single search method"""
         search_results = []
 
-        for result in results:
+        for idx, result in enumerate(results, 1):  # Position-based rank starting from 1
             sr = SearchResult(
-                chunk_id=result["chunk_id"],
-                document_id=result["document_id"],
-                title=result["title"],
+                chunk_id=result["id"],  # Now using direct column name
+                document_id=result["user_document_id"],
+                title="",  # Title will be fetched with parent document if needed
                 text=self._truncate_text(result["text"], 200),
-                score=1.0 / (result["rank"] + 1),  # Simple scoring for single search
-                vector_rank=result["rank"] if search_type == "semantic" else None,
-                text_rank=result["rank"] if search_type == "keyword" else None,
+                score=1.0 / idx,  # Simple scoring based on position
+                vector_rank=idx if search_type == "semantic" else None,
+                text_rank=idx if search_type == "keyword" else None,
             )
             search_results.append(sr)
 
         return search_results
 
-    def _combine_results_rrf(
-        self, vector_results: List[Dict], text_results: List[Dict], rrf_k: int, limit: int
-    ) -> List[SearchResult]:
-        """Combine search results using Reciprocal Rank Fusion"""
-        combined_results = {}
-
-        # Create lookup dictionaries
-        vector_ranks = {r["chunk_id"]: r["rank"] for r in vector_results}
-        text_ranks = {r["chunk_id"]: r["rank"] for r in text_results}
-
-        # Process vector search results
-        for result in vector_results:
-            chunk_id = result["chunk_id"]
-            vector_rank = result["rank"]
-            text_rank = text_ranks.get(chunk_id)
-
-            # Calculate RRF score
-            score = 1.0 / (vector_rank + rrf_k)
-            if text_rank:
-                score += 1.0 / (text_rank + rrf_k)
-
-            combined_results[chunk_id] = SearchResult(
-                chunk_id=chunk_id,
-                document_id=result["document_id"],
-                title=result["title"],
-                text=self._truncate_text(result["text"], 200),
-                score=score,
-                vector_rank=vector_rank,
-                text_rank=text_rank,
-            )
-
-        # Process text search results not in vector results
-        for result in text_results:
-            chunk_id = result["chunk_id"]
-            if chunk_id not in combined_results:
-                text_rank = result["rank"]
-                score = 1.0 / (text_rank + rrf_k)
-
-                combined_results[chunk_id] = SearchResult(
-                    chunk_id=chunk_id,
-                    document_id=result["document_id"],
-                    title=result["title"],
-                    text=self._truncate_text(result["text"], 200),
-                    score=score,
-                    vector_rank=None,
-                    text_rank=text_rank,
-                )
-
-        # Sort by score and return top results
-        sorted_results = sorted(combined_results.values(), key=lambda x: x.score, reverse=True)[:limit]
-
-        return sorted_results
 
     def _truncate_text(self, text: str, max_length: int) -> str:
         """Truncate text to maximum length with ellipsis"""
@@ -447,7 +305,7 @@ class SearchEngine:
         Returns:
             SearchResponse with results and metadata
         """
-        results = self.hybrid_search(request)
+        results = self.execute_search(request)
 
         return SearchResponse(
             results=[r.to_dict() for r in results],
@@ -462,20 +320,20 @@ class SearchEngine:
         table = Table(title=title, show_header=True, header_style="bold magenta")
 
         table.add_column("Rank", style="cyan", width=6)
-        table.add_column("Title", style="yellow", width=30)
-        table.add_column("Text", width=50)
-        table.add_column("Score", style="green", width=12)
-        table.add_column("V-Rank", style="blue", width=8)
-        table.add_column("T-Rank", style="red", width=8)
+        table.add_column("Title", style="yellow", width=20)
+        table.add_column("Text", width=40)
+        table.add_column("Score", style="green", width=10)
+        table.add_column("K-Score", style="red", width=10)
+        table.add_column("V-Score", style="blue", width=10)
 
         for idx, result in enumerate(results, 1):
             table.add_row(
                 str(idx),
-                self._truncate_text(result.title, 30),
-                self._truncate_text(result.text, 50),
-                f"{result.score:.6f}",
-                str(result.vector_rank) if result.vector_rank else "-",
-                str(result.text_rank) if result.text_rank else "-",
+                self._truncate_text(result.title, 20),
+                self._truncate_text(result.text, 40),
+                f"{result.score:.4f}",
+                f"{result.k_score:.4f}" if result.k_score is not None else "-",
+                f"{result.v_score:.4f}" if result.v_score is not None else "-",
             )
 
         console.print(table)
@@ -506,33 +364,11 @@ def fetch_parent_documents(engine, search_results: list) -> tuple[dict, float]:
     if not unique_doc_ids:
         return {}, 0.0
 
-    # Step 2: Single batch query for all unique documents
+    # Step 2: Simple batch query - just get the documents
     batch_query = text("""
-        SELECT 
-            d.id as document_id,
-            d.user_id,
-            d.title,
-            d.url,
-            d.wiki_id,
-            d.views,
-            d.langs,
-            d.meta as document_meta,
-            d.created_at,
-            STRING_AGG(c.text, E'\n\n' ORDER BY c.paragraph_id) as full_text,
-            COUNT(c.id)::int as chunk_count,
-            jsonb_agg(
-                jsonb_build_object(
-                    'chunk_id', c.id,
-                    'paragraph_id', c.paragraph_id,
-                    'text', c.text,
-                    'meta', c.meta
-                ) ORDER BY c.paragraph_id
-            ) as all_chunks
-        FROM user_documents d
-        JOIN user_document_chunks c ON d.id = c.user_document_id
-        WHERE d.id = ANY(:doc_ids)
-        GROUP BY d.id, d.user_id, d.title, d.url, d.wiki_id, 
-                 d.views, d.langs, d.meta, d.created_at
+        SELECT * 
+        FROM user_documents 
+        WHERE id = ANY(:doc_ids)
     """)
 
     with engine.connect() as conn:
@@ -542,7 +378,7 @@ def fetch_parent_documents(engine, search_results: list) -> tuple[dict, float]:
         documents_map = {}
         for row in result:
             doc_data = dict(row._mapping)
-            documents_map[doc_data["document_id"]] = doc_data
+            documents_map[doc_data["id"]] = doc_data
 
     latency_ms = (time.time() - start_time) * 1000
     return documents_map, latency_ms
@@ -627,7 +463,6 @@ def main():
                 embedding=embedding,
                 query_text=query_text,
                 limit=args.limit,
-                user_id=args.user_id,
                 rrf_k=args.rrf_k,
             )
             
@@ -652,8 +487,8 @@ def main():
                     doc = enriched["document"]
                     if doc:
                         print(f"[bold]#{idx} Document: {doc['title']}[/bold]")
-                        print(f"  Chunk ID: {chunk['chunk_id']}, Score: {chunk['score']:.4f}")
-                        print(f"  Document has {doc['chunk_count']} chunks, {len(doc['full_text'])} chars")
+                        print(f"  Chunk ID: {chunk['chunk_id']}, Score: {chunk['score']:.4f} (K: {chunk.get('k_score', 0):.4f}, V: {chunk.get('v_score', 0):.4f})")
+                        print(f"  Document ID: {doc['id']}")
                         print(f"  Chunk text: {chunk['text'][:150]}...")
                         print()
             else:
@@ -664,9 +499,11 @@ def main():
                         SearchResult(
                             chunk_id=r["chunk_id"],
                             document_id=r["document_id"],
-                            title=r["title"],
+                            title="",  # No title in chunks table
                             text=r["text"],
                             score=r["score"],
+                            k_score=r.get("k_score"),
+                            v_score=r.get("v_score"),
                         )
                     )
 
@@ -710,8 +547,8 @@ def main():
                     doc = enriched["document"]
                     if doc:
                         print(f"[bold]#{idx} Document: {doc['title']}[/bold]")
-                        print(f"  Chunk ID: {chunk['chunk_id']}, Score: {chunk['score']:.4f}")
-                        print(f"  Document has {doc['chunk_count']} chunks, {len(doc['full_text'])} chars")
+                        print(f"  Chunk ID: {chunk['chunk_id']}, Score: {chunk['score']:.4f} (K: {chunk.get('k_score', 0):.4f}, V: {chunk.get('v_score', 0):.4f})")
+                        print(f"  Document ID: {doc['id']}")
                         print(f"  Chunk text: {chunk['text'][:150]}...")
                         print()
             else:
