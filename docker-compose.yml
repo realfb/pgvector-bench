@@ -1,0 +1,22 @@
+services:
+  pgvector:
+    image: pgvector/pgvector:pg17
+    container_name: leo-pgvector-db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: leo_pgvector
+    ports:
+      - "54320:5432"
+    volumes:
+      - pgvector_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgvector_data:
+    driver: local

@@ -1,0 +1,21 @@
+[project]
+name = "leo-pgvector"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "datasets>=4.0.0",
+    "pydantic>=2.11.7",
+    "rich>=14.1.0",
+    "sqlalchemy>=2.0.0",
+    "faker>=33.0.0",
+    "psycopg2-binary>=2.9.0",
+    "python-dotenv>=1.0.0",
+    "pgvector>=0.3.0",
+    "numpy>=1.26.0",
+]
+
+[tool.ruff]
+line-length = 110
+
