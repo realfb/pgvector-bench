@@ -1,0 +1,386 @@
+================================================================================
+POSTGRESQL QUERY PERFORMANCE ANALYSIS
+================================================================================
+Timestamp: 20250826_160254
+Database: postgresql://postgres:postgres@localhost:54320/leo_pgvector
+Sample User ID: 3063
+
+
+================================================================================
+=== VECTOR NO FILTER ===
+================================================================================
+
+PERFORMANCE SUMMARY:
+Total Time:     306.487 ms
+Execution Time: 306.409 ms
+Planning Time:  0.078 ms
+Rows Returned:  10
+Total Cost:     1585.74
+
+PARAMETERS:
+  embedding: [768-dimensional vector]
+  limit: 10
+
+SQL QUERY:
+----------------------------------------
+SELECT id, user_document_id, embedding <#> :embedding ::vector AS distance
+FROM user_document_chunks
+ORDER BY embedding <#> :embedding ::vector
+LIMIT :limit
+
+EXPLAIN ANALYZE OUTPUT:
+----------------------------------------
+Limit (cost=1559.40..1585.74 rows=10 width=16) (actual time=300.338..306.389 rows=10 loops=1)
+  Buffers: shared hit=192 read=920
+  Index Scan using idx_chunks_embedding_hnsw (cost=1559.40..1274473.80 rows=483290 width=16) (actual time=300.337..306.385 rows=10 loops=1)
+    Buffers: shared hit=192 read=920
+Planning:
+  Buffers: shared hit=10
+Planning Time: 0.078 ms
+Execution Time: 306.409 ms
+
+
+================================================================================
+=== VECTOR USER FILTER ===
+================================================================================
+
+PERFORMANCE SUMMARY:
+Total Time:     37.772 ms
+Execution Time: 37.683 ms
+Planning Time:  0.089 ms
+Rows Returned:  10
+Total Cost:     17.62
+
+PARAMETERS:
+  user_id: 3063
+  embedding: [768-dimensional vector]
+  limit: 10
+
+SQL QUERY:
+----------------------------------------
+SELECT id, user_document_id, embedding <#> :embedding ::vector AS distance
+FROM user_document_chunks
+WHERE user_id = :user_id
+ORDER BY embedding <#> :embedding ::vector
+LIMIT :limit
+
+EXPLAIN ANALYZE OUTPUT:
+----------------------------------------
+Limit (cost=17.59..17.62 rows=10 width=16) (actual time=37.668..37.670 rows=10 loops=1)
+  Buffers: shared hit=568 read=104
+  Sort (cost=17.59..17.72 rows=52 width=16) (actual time=37.666..37.667 rows=10 loops=1)
+    Sort Key: ((embedding <#> '[0.3424145,0.760562,-0.39382863,0.115892045,0.6555772,0.4139557,0.6392125,-0.286096...
+    Sort Method: top-N heapsort  Memory: 25kB
+    Buffers: shared hit=568 read=104
+    Index Scan using ix_user_document_chunks_user_id (cost=0.42..16.47 rows=52 width=16) (actual time=0.093..37.620 rows=160 loops=1)
+      Index Cond: (user_id = 3063)
+      Buffers: shared hit=568 read=104
+Planning:
+  Buffers: shared hit=1
+Planning Time: 0.089 ms
+Execution Time: 37.683 ms
+
+
+================================================================================
+=== VECTOR USER JSONB SIMPLE ===
+================================================================================
+
+PERFORMANCE SUMMARY:
+Total Time:     0.529 ms
+Execution Time: 0.417 ms
+Planning Time:  0.112 ms
+Rows Returned:  10
+Total Cost:     17.01
+
+PARAMETERS:
+  user_id: 3063
+  embedding: [768-dimensional vector]
+  position: middle
+  has_code: False
+  limit: 10
+
+SQL QUERY:
+----------------------------------------
+SELECT id, user_document_id, embedding <#> :embedding ::vector AS distance
+FROM user_document_chunks
+WHERE user_id = :user_id
+AND meta->>'position' = :position
+AND (meta->>'has_code')::boolean = :has_code
+ORDER BY embedding <#> :embedding ::vector
+LIMIT :limit
+
+EXPLAIN ANALYZE OUTPUT:
+----------------------------------------
+Limit (cost=17.00..17.01 rows=1 width=16) (actual time=0.406..0.408 rows=10 loops=1)
+  Buffers: shared hit=524 read=0
+  Sort (cost=17.00..17.01 rows=1 width=16) (actual time=0.406..0.406 rows=10 loops=1)
+    Sort Key: ((embedding <#> '[0.3424145,0.760562,-0.39382863,0.115892045,0.6555772,0.4139557,0.6392125,-0.286096...
+    Sort Method: top-N heapsort  Memory: 25kB
+    Buffers: shared hit=524 read=0
+    Index Scan using ix_user_document_chunks_user_id (cost=0.42..16.99 rows=1 width=16) (actual time=0.025..0.391 rows=123 loops=1)
+      Index Cond: (user_id = 3063)
+      Filter: (((meta ->> 'position'::text) = 'middle'::text) AND (NOT ((meta ->> 'has_code'::text))::boolean))
+      Rows Removed by Filter: 37
+      Buffers: shared hit=524 read=0
+Planning:
+  Buffers: shared hit=15
+Planning Time: 0.112 ms
+Execution Time: 0.417 ms
+
+
+================================================================================
+=== VECTOR USER JSONB COMPLEX ===
+================================================================================
+
+PERFORMANCE SUMMARY:
+Total Time:     0.330 ms
+Execution Time: 0.267 ms
+Planning Time:  0.063 ms
+Rows Returned:  10
+Total Cost:     17.66
+
+PARAMETERS:
+  user_id: 3063
+  embedding: [768-dimensional vector]
+  min_complexity: 3.0
+  max_complexity: 7.0
+  limit: 10
+
+SQL QUERY:
+----------------------------------------
+SELECT id, user_document_id, embedding <#> :embedding ::vector AS distance
+FROM user_document_chunks
+WHERE user_id = :user_id
+AND (meta->>'complexity_score')::float >= :min_complexity
+AND (meta->>'complexity_score')::float <= :max_complexity
+AND meta->>'language_detected' = 'en'
+ORDER BY embedding <#> :embedding ::vector
+LIMIT :limit
+
+EXPLAIN ANALYZE OUTPUT:
+----------------------------------------
+Limit (cost=17.65..17.66 rows=1 width=16) (actual time=0.258..0.259 rows=10 loops=1)
+  Buffers: shared hit=292 read=0
+  Sort (cost=17.65..17.66 rows=1 width=16) (actual time=0.257..0.258 rows=10 loops=1)
+    Sort Key: ((embedding <#> '[0.3424145,0.760562,-0.39382863,0.115892045,0.6555772,0.4139557,0.6392125,-0.286096...
+    Sort Method: top-N heapsort  Memory: 25kB
+    Buffers: shared hit=292 read=0
+    Index Scan using ix_user_document_chunks_user_id (cost=0.42..17.64 rows=1 width=16) (actual time=0.022..0.249 rows=65 loops=1)
+      Index Cond: (user_id = 3063)
+      Filter: (((meta ->> 'language_detected'::text) = 'en'::text) AND (((meta ->> 'complexity_score'::text))::double precision >= '3'::double precision) AND (((meta ->> 'complexity_score'::text))::double precision <= '7'::double precision))
+      Rows Removed by Filter: 95
+      Buffers: shared hit=292 read=0
+Planning:
+  Buffers: shared hit=4
+Planning Time: 0.063 ms
+Execution Time: 0.267 ms
+
+
+================================================================================
+=== TEXT NO FILTER ===
+================================================================================
+
+PERFORMANCE SUMMARY:
+Total Time:     12.531 ms
+Execution Time: 3.235 ms
+Planning Time:  9.296 ms
+Rows Returned:  10
+Total Cost:     1266.49
+
+PARAMETERS:
+  query: machine learning
+  limit: 10
+
+SQL QUERY:
+----------------------------------------
+SELECT id, user_document_id,
+ts_rank_cd(text_search_vector, websearch_to_tsquery('english', :query)) AS relevance
+FROM user_document_chunks
+WHERE websearch_to_tsquery('english', :query) @@ text_search_vector
+ORDER BY relevance DESC
+LIMIT :limit
+
+EXPLAIN ANALYZE OUTPUT:
+----------------------------------------
+Limit (cost=1266.46..1266.49 rows=10 width=12) (actual time=3.212..3.214 rows=10 loops=1)
+  Buffers: shared hit=416 read=0
+  Sort (cost=1266.46..1266.51 rows=18 width=12) (actual time=3.211..3.211 rows=10 loops=1)
+    Sort Key: (ts_rank_cd(text_search_vector, '''machin'' & ''learn'''::tsquery)) DESC
+    Sort Method: top-N heapsort  Memory: 25kB
+    Buffers: shared hit=416 read=0
+    Bitmap Heap Scan on user_document_chunks (cost=1194.67..1266.09 rows=18 width=12) (actual time=2.540..3.178 rows=75 loops=1)
+      Buffers: shared hit=413 read=0
+      Bitmap Index Scan using idx_chunks_text_search_gin (cost=0.00..1194.66 rows=18 width=0) (actual time=2.510..2.510 rows=75 loops=1)
+        Index Cond: (text_search_vector @@ '''machin'' & ''learn'''::tsquery)
+        Buffers: shared hit=284 read=0
+Planning:
+  Buffers: shared hit=51
+Planning Time: 9.296 ms
+Execution Time: 3.235 ms
+
+
+================================================================================
+=== TEXT USER FILTER ===
+================================================================================
+
+PERFORMANCE SUMMARY:
+Total Time:     0.523 ms
+Execution Time: 0.125 ms
+Planning Time:  0.398 ms
+Rows Returned:  0
+Total Cost:     16.49
+
+PARAMETERS:
+  user_id: 3063
+  query: machine learning
+  limit: 10
+
+SQL QUERY:
+----------------------------------------
+SELECT id, user_document_id,
+ts_rank_cd(text_search_vector, websearch_to_tsquery('english', :query)) AS relevance
+FROM user_document_chunks
+WHERE user_id = :user_id
+AND websearch_to_tsquery('english', :query) @@ text_search_vector
+ORDER BY relevance DESC
+LIMIT :limit
+
+EXPLAIN ANALYZE OUTPUT:
+----------------------------------------
+Limit (cost=16.48..16.49 rows=1 width=12) (actual time=0.112..0.113 rows=0 loops=1)
+  Buffers: shared hit=44 read=0
+  Sort (cost=16.48..16.49 rows=1 width=12) (actual time=0.111..0.111 rows=0 loops=1)
+    Sort Key: (ts_rank_cd(text_search_vector, '''machin'' & ''learn'''::tsquery)) DESC
+    Sort Method: quicksort  Memory: 25kB
+    Buffers: shared hit=44 read=0
+    Index Scan using ix_user_document_chunks_user_id (cost=0.42..16.47 rows=1 width=12) (actual time=0.108..0.108 rows=0 loops=1)
+      Index Cond: (user_id = 3063)
+      Filter: ('''machin'' & ''learn'''::tsquery @@ text_search_vector)
+      Rows Removed by Filter: 160
+      Buffers: shared hit=44 read=0
+Planning:
+  Buffers: shared hit=1
+Planning Time: 0.398 ms
+Execution Time: 0.125 ms
+
+
+================================================================================
+=== HYBRID RRF ===
+================================================================================
+
+PERFORMANCE SUMMARY:
+Total Time:     1.116 ms
+Execution Time: 0.782 ms
+Planning Time:  0.334 ms
+Rows Returned:  10
+Total Cost:     38.95
+
+PARAMETERS:
+  user_id: 3063
+  embedding: [768-dimensional vector]
+  query: machine learning
+  vector_weight: 1.0
+  text_weight: 1.0
+  limit: 10
+
+SQL QUERY:
+----------------------------------------
+WITH vector_search AS (
+SELECT id, user_document_id, paragraph_id, text, meta, created_at,
+ROW_NUMBER() OVER (ORDER BY embedding <#> :embedding ::vector) AS rank,
+embedding <#> :embedding ::vector AS distance
+FROM user_document_chunks
+WHERE user_id = :user_id
+ORDER BY embedding <#> :embedding ::vector
+LIMIT 100
+),
+keyword_search AS (
+SELECT id, user_document_id, paragraph_id, text, meta, created_at,
+ROW_NUMBER() OVER (ORDER BY ts_rank_cd(text_search_vector, websearch_to_tsquery('english', :query)) DESC) AS rank,
+ts_rank_cd(text_search_vector, websearch_to_tsquery('english', :query)) AS relevance
+FROM user_document_chunks
+WHERE user_id = :user_id
+AND websearch_to_tsquery('english', :query) @@ text_search_vector
+ORDER BY relevance DESC
+LIMIT 100
+)
+SELECT
+COALESCE(v.id, k.id) as id,
+COALESCE(v.user_document_id, k.user_document_id) as user_document_id,
+COALESCE(v.paragraph_id, k.paragraph_id) as paragraph_id,
+COALESCE(v.text, k.text) as text,
+COALESCE(v.meta, k.meta) as meta,
+COALESCE(v.created_at, k.created_at) as created_at,
+COALESCE(k.relevance, 0) AS k_score,
+COALESCE(1.0 / (60 + v.rank), 0) AS v_score,
+(COALESCE(1.0 / (60 + v.rank), 0) * :vector_weight +
+COALESCE(1.0 / (60 + k.rank), 0) * :text_weight) AS score
+FROM vector_search v
+FULL OUTER JOIN keyword_search k ON v.id = k.id
+ORDER BY score DESC
+LIMIT :limit
+
+EXPLAIN ANALYZE OUTPUT:
+----------------------------------------
+Limit (cost=38.93..38.95 rows=10 width=152) (actual time=0.707..0.710 rows=10 loops=1)
+  Buffers: shared hit=719 read=0
+  Sort (cost=38.93..39.06 rows=52 width=152) (actual time=0.707..0.708 rows=10 loops=1)
+    Sort Key: (((COALESCE((1.0 / ((60 + (row_number() OVER (?))))::numeric), '0'::numeric) * 1.0) + (COALESCE((1.0...
+    Sort Method: top-N heapsort  Memory: 35kB
+    Buffers: shared hit=719 read=0
+    Hash Join (cost=34.49..37.80 rows=52 width=152) (actual time=0.572..0.642 rows=100 loops=1)
+      Buffers: shared hit=716 read=0
+      Limit (cost=17.97..18.99 rows=52 width=810) (actual time=0.472..0.500 rows=100 loops=1)
+        Buffers: shared hit=672 read=0
+        WindowAgg (cost=17.97..18.99 rows=52 width=810) (actual time=0.471..0.494 rows=100 loops=1)
+          Buffers: shared hit=672 read=0
+          Sort (cost=17.95..18.08 rows=52 width=802) (actual time=0.469..0.473 rows=100 loops=1)
+            Sort Key: ((user_document_chunks.embedding <#> '[0.3424145,0.760562,-0.39382863,0.115892045,0.6555772,0.413955...
+            Sort Method: quicksort  Memory: 157kB
+            Buffers: shared hit=672 read=0
+            Index Scan using ix_user_document_chunks_user_id (cost=0.42..16.47 rows=52 width=802) (actual time=0.013..0.408 rows=160 loops=1)
+              Index Cond: (user_id = 3063)
+              Buffers: shared hit=672 read=0
+      Hash (cost=16.51..16.51 rows=1 width=806) (actual time=0.092..0.092 rows=0 loops=1)
+        Buffers: shared hit=44 read=0
+        Subquery Scan (cost=16.48..16.51 rows=1 width=806) (actual time=0.091..0.092 rows=0 loops=1)
+          Buffers: shared hit=44 read=0
+          Limit (cost=16.48..16.50 rows=1 width=806) (actual time=0.091..0.091 rows=0 loops=1)
+            Buffers: shared hit=44 read=0
+            WindowAgg (cost=16.48..16.50 rows=1 width=806) (actual time=0.091..0.091 rows=0 loops=1)
+              Buffers: shared hit=44 read=0
+              Sort (cost=16.48..16.49 rows=1 width=798) (actual time=0.090..0.090 rows=0 loops=1)
+                Sort Key: (ts_rank_cd(user_document_chunks_1.text_search_vector, '''machin'' & ''learn'''::tsquery)) DESC
+                Sort Method: quicksort  Memory: 25kB
+                Buffers: shared hit=44 read=0
+                Index Scan using ix_user_document_chunks_user_id (cost=0.42..16.47 rows=1 width=798) (actual time=0.083..0.083 rows=0 loops=1)
+                  Index Cond: (user_id = 3063)
+                  Filter: ('''machin'' & ''learn'''::tsquery @@ text_search_vector)
+                  Rows Removed by Filter: 160
+                  Buffers: shared hit=44 read=0
+Planning:
+  Buffers: shared hit=25
+Planning Time: 0.334 ms
+Execution Time: 0.782 ms
+
+
+================================================================================
+=== PERFORMANCE COMPARISON SUMMARY ===
+================================================================================
+
+Query Type                      | Total (ms) | Exec (ms) | Plan (ms) | Rows | Cost
+-------------------------------------------------------------------------------------
+Vector User Jsonb Complex       |       0.33 |      0.27 |      0.06 |   10 |       18
+Text User Filter                |       0.52 |      0.12 |      0.40 |    0 |       16
+Vector User Jsonb Simple        |       0.53 |      0.42 |      0.11 |   10 |       17
+Hybrid Rrf                      |       1.12 |      0.78 |      0.33 |   10 |       39
+Text No Filter                  |      12.53 |      3.23 |      9.30 |   10 |     1266
+Vector User Filter              |      37.77 |     37.68 |      0.09 |   10 |       18
+Vector No Filter                |     306.49 |    306.41 |      0.08 |   10 |     1586
+
+KEY INSIGHTS:
+----------------------------------------
+• User filtering is 8.1x faster than no filter
+• User + JSONB filtering is 579x faster than no filter
+• JSONB filtering adds 71.4x speedup over user-only filter
+
