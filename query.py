@@ -42,6 +42,7 @@ class SearchEngine:
 
     def hybrid_search_function(
         self,
+        user_id: int,
         embedding: List[float],
         query_text: str,
         limit: int = 10,
@@ -50,10 +51,11 @@ class SearchEngine:
         rrf_k: int = 50,
     ) -> tuple[List[Dict[str, Any]], float]:
         """
-        Execute hybrid search using the stored database function defined in models.py.
+        Execute optimized hybrid search with user filtering at the database level.
         This is the primary hybrid search implementation.
 
         Args:
+            user_id: User ID to filter results
             embedding: Query embedding vector (768-dimensional)
             query_text: Search query text
             limit: Maximum number of results
@@ -73,6 +75,7 @@ class SearchEngine:
             result = conn.execute(
                 text("""
                     SELECT * FROM hybrid_search(
+                        :user_id,
                         :query_text,
                         :embedding ::vector(768),
                         :limit,
@@ -82,6 +85,7 @@ class SearchEngine:
                     )
                 """),
                 {
+                    "user_id": user_id,
                     "query_text": query_text,
                     "embedding": embedding_str,
                     "limit": limit,
@@ -110,15 +114,16 @@ class SearchEngine:
         return results, latency_ms
 
     def vector_search(
-        self, embedding: List[float], limit: int = 40, user_id: Optional[int] = None
+        self, user_id: int, embedding: List[float], limit: int = 40
     ) -> tuple[List[Dict[str, Any]], float]:
         """
-        Perform semantic search using vector similarity (inner product).
+        Perform optimized semantic search using vector similarity with user filtering.
+        Now uses user_id directly on chunks table for efficient filtering.
 
         Args:
+            user_id: User ID to filter results
             embedding: Query embedding vector (768-dimensional for Cohere)
             limit: Maximum number of results
-            user_id: Optional user ID filter
 
         Returns:
             Tuple of (search results, latency in ms)
@@ -129,50 +134,37 @@ class SearchEngine:
             # Convert embedding to PostgreSQL vector format
             embedding_str = "[" + ",".join(map(str, embedding)) + "]"
 
-            # Simplified query - just get everything from chunks table
-            if user_id:
-                query = text("""
-                    SELECT 
-                        *,
-                        embedding <#> :embedding ::vector AS distance
-                    FROM user_document_chunks
-                    WHERE user_document_id IN (
-                        SELECT id FROM user_documents WHERE user_id = :user_id
-                    )
-                    ORDER BY embedding <#> :embedding ::vector
-                    LIMIT :limit
-                """)
-            else:
-                query = text("""
-                    SELECT 
-                        *,
-                        embedding <#> :embedding ::vector AS distance
-                    FROM user_document_chunks
-                    ORDER BY embedding <#> :embedding ::vector
-                    LIMIT :limit
-                """)
+            # Optimized query using user_id directly on chunks
+            query = text("""
+                SELECT 
+                    *,
+                    embedding <#> :embedding ::vector AS distance
+                FROM user_document_chunks
+                WHERE user_id = :user_id
+                ORDER BY embedding <#> :embedding ::vector
+                LIMIT :limit
+            """)
 
-            params = {"embedding": embedding_str, "limit": limit}
-            if user_id:
-                params["user_id"] = user_id
-
-            result = conn.execute(query, params)
+            result = conn.execute(
+                query,
+                {"user_id": user_id, "embedding": embedding_str, "limit": limit}
+            )
             results = [dict(row._mapping) for row in result]
         
         latency_ms = (time.time() - start_time) * 1000
         return results, latency_ms
 
     def text_search(
-        self, query_text: str, limit: int = 40, user_id: Optional[int] = None
+        self, user_id: int, query_text: str, limit: int = 40
     ) -> tuple[List[Dict[str, Any]], float]:
         """
-        Perform keyword search using PostgreSQL's full-text search (tsearch2).
-        Uses websearch_to_tsquery for better user query handling.
+        Perform optimized keyword search with user filtering.
+        Now uses user_id directly on chunks table for efficient filtering.
 
         Args:
+            user_id: User ID to filter results
             query_text: Keyword query string
             limit: Maximum number of results
-            user_id: Optional user ID filter
 
         Returns:
             Tuple of (search results, latency in ms)
@@ -180,43 +172,26 @@ class SearchEngine:
         start_time = time.time()
         
         with self.engine.connect() as conn:
-            # Simplified query - just get everything from chunks table
-            if user_id:
-                query = text("""
-                    SELECT
-                        *,
-                        ts_rank_cd(
-                            text_search_vector, 
-                            websearch_to_tsquery('english', :query)
-                        ) AS relevance
-                    FROM user_document_chunks
-                    WHERE 
-                        websearch_to_tsquery('english', :query) @@ text_search_vector
-                        AND user_document_id IN (
-                            SELECT id FROM user_documents WHERE user_id = :user_id
-                        )
-                    ORDER BY relevance DESC
-                    LIMIT :limit
-                """)
-            else:
-                query = text("""
-                    SELECT
-                        *,
-                        ts_rank_cd(
-                            text_search_vector, 
-                            websearch_to_tsquery('english', :query)
-                        ) AS relevance
-                    FROM user_document_chunks
-                    WHERE websearch_to_tsquery('english', :query) @@ text_search_vector
-                    ORDER BY relevance DESC
-                    LIMIT :limit
-                """)
+            # Optimized query using user_id directly on chunks
+            query = text("""
+                SELECT
+                    *,
+                    ts_rank_cd(
+                        text_search_vector, 
+                        websearch_to_tsquery('english', :query)
+                    ) AS relevance
+                FROM user_document_chunks
+                WHERE 
+                    user_id = :user_id
+                    AND websearch_to_tsquery('english', :query) @@ text_search_vector
+                ORDER BY relevance DESC
+                LIMIT :limit
+            """)
 
-            params = {"query": query_text, "limit": limit}
-            if user_id:
-                params["user_id"] = user_id
-
-            result = conn.execute(query, params)
+            result = conn.execute(
+                query,
+                {"user_id": user_id, "query": query_text, "limit": limit}
+            )
             results = [dict(row._mapping) for row in result]
         
         latency_ms = (time.time() - start_time) * 1000
@@ -225,6 +200,7 @@ class SearchEngine:
     def execute_search(self, request: SearchRequest) -> List[SearchResult]:
         """
         Execute search request by routing to appropriate search method.
+        All searches are now user-scoped for maximum performance.
 
         Args:
             request: SearchRequest object with query parameters
@@ -232,29 +208,33 @@ class SearchEngine:
         Returns:
             List of SearchResult objects
         """
+        # Ensure user_id is provided
+        if not request.user_id:
+            raise ValueError("user_id is required for all search operations")
+
         # Route to appropriate search method based on type
         if request.search_type == SearchType.SEMANTIC:
             if not request.embedding:
                 raise ValueError("Semantic search requires an embedding")
-            vector_results, _ = self.vector_search(request.embedding, request.limit, request.user_id)
+            vector_results, _ = self.vector_search(request.user_id, request.embedding, request.limit)
             return self._process_single_search_results(vector_results, "semantic")
 
         elif request.search_type == SearchType.KEYWORD:
             if not request.query_text:
                 raise ValueError("Keyword search requires query_text")
-            text_results, _ = self.text_search(request.query_text, request.limit, request.user_id)
+            text_results, _ = self.text_search(request.user_id, request.query_text, request.limit)
             return self._process_single_search_results(text_results, "keyword")
 
         else:  # HYBRID
             if not request.embedding or not request.query_text:
                 raise ValueError("Hybrid search requires both embedding and query_text")
             
-            # Use the database hybrid search function directly
+            # Use the optimized database hybrid search function
             results, _ = self.hybrid_search_function(
+                user_id=request.user_id,
                 embedding=request.embedding,
                 query_text=request.query_text,
                 limit=request.limit,
-                user_id=request.user_id,
                 rrf_k=request.rrf_k
             )
             
@@ -339,13 +319,14 @@ class SearchEngine:
         console.print(table)
 
 
-def fetch_parent_documents(engine, search_results: list) -> tuple[dict, float]:
+def fetch_parent_documents(engine, search_results: list, user_id: int) -> tuple[dict, float]:
     """
-    Fetch parent documents for search results using batch fetch with deduplication
+    Fetch parent documents for search results with user filtering for additional security.
 
     Args:
         engine: SQLAlchemy engine
         search_results: List of search results with document_id field
+        user_id: User ID to ensure documents belong to the user
 
     Returns:
         Tuple of (documents map, latency in ms)
@@ -364,15 +345,18 @@ def fetch_parent_documents(engine, search_results: list) -> tuple[dict, float]:
     if not unique_doc_ids:
         return {}, 0.0
 
-    # Step 2: Simple batch query - just get the documents
+    # Step 2: Batch query with user filtering for security
     batch_query = text("""
         SELECT * 
         FROM user_documents 
-        WHERE id = ANY(:doc_ids)
+        WHERE id = ANY(:doc_ids) AND user_id = :user_id
     """)
 
     with engine.connect() as conn:
-        result = conn.execute(batch_query, {"doc_ids": unique_doc_ids})
+        result = conn.execute(
+            batch_query, 
+            {"doc_ids": unique_doc_ids, "user_id": user_id}
+        )
 
         # Step 3: Create efficient mapping structure
         documents_map = {}
@@ -458,8 +442,9 @@ def main():
 
         # Execute search based on type
         if search_type == SearchType.HYBRID and embedding:
-            # Use the efficient hybrid search function
+            # Use the optimized hybrid search function
             results, search_latency = engine.hybrid_search_function(
+                user_id=args.user_id,
                 embedding=embedding,
                 query_text=query_text,
                 limit=args.limit,
@@ -471,7 +456,9 @@ def main():
             # Fetch parent documents if requested
             if args.fetch_docs:
                 print("[cyan]Fetching parent documents...[/cyan]")
-                documents_map, fetch_latency = fetch_parent_documents(engine.engine, results)
+                documents_map, fetch_latency = fetch_parent_documents(
+                    engine.engine, results, args.user_id
+                )
                 enriched_results = create_enriched_results(results, documents_map)
 
                 # Display document fetch summary
@@ -531,7 +518,9 @@ def main():
                     }
                     for r in results
                 ]
-                documents_map, fetch_latency = fetch_parent_documents(engine.engine, results_dict)
+                documents_map, fetch_latency = fetch_parent_documents(
+                    engine.engine, results_dict, args.user_id
+                )
                 enriched_results = create_enriched_results(results_dict, documents_map)
 
                 # Display document fetch summary
@@ -556,10 +545,8 @@ def main():
 
         # Show search parameters
         print(
-            f"\n[dim]Search type: {search_type.value}, Limit: {args.limit}, Depth: {args.depth}, RRF-k: {args.rrf_k}[/dim]"
+            f"\n[dim]Search type: {search_type.value}, User: {args.user_id}, Limit: {args.limit}, Depth: {args.depth}, RRF-k: {args.rrf_k}[/dim]"
         )
-        if args.user_id:
-            print(f"[dim]Filtered by user: {args.user_id}[/dim]")
         if args.fetch_docs:
             print("[dim]Parent documents fetched[/dim]")
     else:

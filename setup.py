@@ -281,6 +281,7 @@ class DataIngestion:
                         
                         doc_chunk = UserDocumentChunk(
                             user_document_id=user_doc.id,
+                            user_id=user.id,  # Set user_id directly for performance
                             paragraph_id=chunk.paragraph_id,
                             text=chunk.text,
                             embedding=chunk.emb,

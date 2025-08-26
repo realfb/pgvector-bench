@@ -42,8 +42,8 @@ class UserDocument(Base):
 
     __tablename__ = "user_documents"
     __table_args__ = (
-        UniqueConstraint("url", name="_document_url_uc"),  # URL must be unique across all users
-        UniqueConstraint("wiki_id", name="_document_wiki_id_uc"),  # Wiki ID must be unique
+        UniqueConstraint("user_id", "url", name="_document_user_url_uc"),
+        UniqueConstraint("user_id", "wiki_id", name="_document_user_wiki_id_uc"),
         Index("idx_documents_user_id", "user_id"),
         Index("idx_documents_wiki_id", "wiki_id"),
         Index("idx_documents_meta_gin", "meta", postgresql_using="gin"),
@@ -76,40 +76,38 @@ class UserDocumentChunk(Base):
     __tablename__ = "user_document_chunks"
     __table_args__ = (
         UniqueConstraint("user_document_id", "paragraph_id", name="_document_chunk_uc"),
-        Index("idx_chunks_document_id", "user_document_id"),
+        
+        # User-specific indexes for efficient filtering
+        Index("idx_chunks_user_id", "user_id"),
+        Index("idx_chunks_user_document_id", "user_document_id"),
+        
+        # User-specific FTS index
+        Index("idx_chunks_user_text_search_gin", "user_id", "text_search_vector", postgresql_using="gin"),
+        
+        # User-specific vector search index
         Index(
-            "idx_chunks_text_search_vector_gin",
-            "text_search_vector",
-            postgresql_using="gin",
-        ),
-        Index(
-            "idx_chunks_embedding_hnsw",
+            "idx_chunks_user_embedding_hnsw",
+            "user_id",
             "embedding",
             postgresql_using="hnsw",
             postgresql_with={"m": 16, "ef_construction": 256},
             postgresql_ops={"embedding": "vector_ip_ops"},
         ),
+        
+        # Metadata index
         Index("idx_chunks_meta_gin", "meta", postgresql_using="gin"),
     )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_document_id: Mapped[int] = mapped_column(ForeignKey("user_documents.id"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     paragraph_id: Mapped[int] = mapped_column()
     text: Mapped[str] = mapped_column(Text)
-
-    # Full-text search vector - stored as computed column for efficiency
     text_search_vector: Mapped[TSVECTOR] = mapped_column(
         TSVECTOR, Computed("to_tsvector('english', text)", persisted=True)
     )
-
-    # Vector embedding column - 768 dimensions for Cohere embeddings
     embedding: Mapped[Vector] = mapped_column(Vector(768))
-
-    # Metadata column for chunk-level filtering
-    # Stores: section_type, position, word_count, has_code, has_math,
-    # language_detected, sentiment, complexity_score, etc.
     meta: Mapped[Dict[str, Any]] = mapped_column(JSONB, nullable=False, default=dict, server_default="{}")
-
     created_at: Mapped[datetime] = mapped_column(default=lambda: datetime.now(timezone.utc))
 
     # Relationships
@@ -121,9 +119,10 @@ class UserDocumentChunk(Base):
 create_extension = DDL("CREATE EXTENSION IF NOT EXISTS vector")
 event.listen(Base.metadata, "before_create", create_extension)
 
-# Create hybrid search function
+
 create_hybrid_search = DDL("""
 CREATE OR REPLACE FUNCTION hybrid_search(
+    query_user_id int,
     query_text text,
     query_embedding vector(768),
     match_count int,
@@ -148,12 +147,14 @@ WITH full_text AS (
     SELECT 
         id,
         -- Note: ts_rank_cd is not indexable but will only rank matches of the where clause
-        -- which shouldn't be too big
+        -- which shouldn't be too big when filtered by user
         row_number() OVER (
             ORDER BY ts_rank_cd(text_search_vector, websearch_to_tsquery(query_text)) DESC
         ) as rank_ix
     FROM user_document_chunks
-    WHERE text_search_vector @@ websearch_to_tsquery(query_text)
+    WHERE 
+        user_id = query_user_id  -- Filter by user first
+        AND text_search_vector @@ websearch_to_tsquery(query_text)
     ORDER BY rank_ix
     LIMIT LEAST(match_count, 30) * 2
 ),
@@ -162,6 +163,7 @@ semantic AS (
         id,
         row_number() OVER (ORDER BY embedding <#> query_embedding) as rank_ix
     FROM user_document_chunks
+    WHERE user_id = query_user_id  -- Filter by user first
     ORDER BY rank_ix
     LIMIT LEAST(match_count, 30) * 2
 )
@@ -180,6 +182,8 @@ FROM
     full_text
     FULL OUTER JOIN semantic ON full_text.id = semantic.id
     JOIN user_document_chunks ON COALESCE(full_text.id, semantic.id) = user_document_chunks.id
+WHERE 
+    user_document_chunks.user_id = query_user_id  -- Ensure final results are filtered
 ORDER BY 
     score DESC
 LIMIT LEAST(match_count, 30)
