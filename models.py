@@ -80,14 +80,12 @@ class UserDocumentChunk(Base):
         # User-specific indexes for efficient filtering
         Index("idx_chunks_user_id", "user_id"),
         Index("idx_chunks_user_document_id", "user_document_id"),
+        Index("idx_chunks_text_search_gin", "text_search_vector", postgresql_using="gin"),
         
-        # User-specific FTS index
-        Index("idx_chunks_user_text_search_gin", "user_id", "text_search_vector", postgresql_using="gin"),
-        
-        # User-specific vector search index
+        # HNSW index for vector search (single column only - HNSW doesn't support composite)
+        # The user_id filtering will use idx_chunks_user_id index
         Index(
-            "idx_chunks_user_embedding_hnsw",
-            "user_id",
+            "idx_chunks_embedding_hnsw",
             "embedding",
             postgresql_using="hnsw",
             postgresql_with={"m": 16, "ef_construction": 256},
@@ -182,8 +180,6 @@ FROM
     full_text
     FULL OUTER JOIN semantic ON full_text.id = semantic.id
     JOIN user_document_chunks ON COALESCE(full_text.id, semantic.id) = user_document_chunks.id
-WHERE 
-    user_document_chunks.user_id = query_user_id  -- Ensure final results are filtered
 ORDER BY 
     score DESC
 LIMIT LEAST(match_count, 30)

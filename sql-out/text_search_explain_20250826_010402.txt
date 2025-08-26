@@ -1,0 +1,36 @@
+=== TEXT SEARCH QUERY PLAN ===
+Timestamp: 20250826_010402
+User ID: 1
+Query Text: science technology
+Limit: 10
+
+QUERY:
+SELECT * FROM user_document_chunks
+WHERE user_id = :user_id
+  AND websearch_to_tsquery('english', :query) @@ text_search_vector
+ORDER BY ts_rank_cd(text_search_vector, websearch_to_tsquery('english', :query)) DESC
+LIMIT :limit
+
+EXPLAIN ANALYZE OUTPUT:
+Limit  (cost=9.52..9.53 rows=1 width=88) (actual time=0.015..0.016 rows=0 loops=1)
+  Output: id, user_document_id, paragraph_id, text, meta, created_at, (ts_rank_cd(text_search_vector, '''scienc'' & ''technolog'''::tsquery))
+  Buffers: shared hit=5
+  ->  Sort  (cost=9.52..9.53 rows=1 width=88) (actual time=0.014..0.015 rows=0 loops=1)
+        Output: id, user_document_id, paragraph_id, text, meta, created_at, (ts_rank_cd(text_search_vector, '''scienc'' & ''technolog'''::tsquery))
+        Sort Key: (ts_rank_cd(user_document_chunks.text_search_vector, '''scienc'' & ''technolog'''::tsquery)) DESC
+        Sort Method: quicksort  Memory: 25kB
+        Buffers: shared hit=5
+        ->  Bitmap Heap Scan on public.user_document_chunks  (cost=4.16..9.51 rows=1 width=88) (actual time=0.008..0.009 rows=0 loops=1)
+              Output: id, user_document_id, paragraph_id, text, meta, created_at, ts_rank_cd(text_search_vector, '''scienc'' & ''technolog'''::tsquery)
+              Recheck Cond: (user_document_chunks.user_id = 1)
+              Filter: ('''scienc'' & ''technolog'''::tsquery @@ user_document_chunks.text_search_vector)
+              Rows Removed by Filter: 5
+              Heap Blocks: exact=1
+              Buffers: shared hit=2
+              ->  Bitmap Index Scan on idx_chunks_user_id  (cost=0.00..4.16 rows=2 width=0) (actual time=0.002..0.002 rows=5 loops=1)
+                    Index Cond: (user_document_chunks.user_id = 1)
+                    Buffers: shared hit=1
+Planning:
+  Buffers: shared hit=40
+Planning Time: 10.128 ms
+Execution Time: 0.027 ms
