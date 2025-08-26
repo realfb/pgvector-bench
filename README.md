@@ -1,1 +1,439 @@
+A production-ready implementation of hybrid search combining vector similarity search with full-text search using PostgreSQL, pgvector, and Reciprocal Rank Fusion (RRF).
 
+- each user has a set of documents
+- each document has a set of chunks whose embeddings are computed and stored in the document chunks table
+- we want to do a very fast retrieval of the documents be it via semantic search, keyword search or hybrid search
+- we need to always filter based for a specific user id (i.e. we narrow down the search space to documents uploaded by user abc and then perform the search methods - but we want this operation to very efficient)
+
+## Features
+
+- **Hybrid Search**: Combines semantic vector search with full-text search
+- **RRF Scoring**: Reciprocal Rank Fusion for optimal result ranking
+- **pgvector Integration**: Efficient vector similarity search with HNSW indexes
+- **Full-Text Search**: PostgreSQL's built-in tsearch2 with GIN indexes
+- **User Scoping**: Multi-tenant support with user-based filtering
+- **Wikipedia Dataset**: Pre-configured for Cohere's Wikipedia embeddings
+- **Document Fetching**: Optimized batch fetching of parent documents with deduplication
+
+## Prerequisites
+
+- Python 3.12+
+- Docker and Docker Compose
+- 4GB+ RAM for dataset processing
+
+## Installation
+
+1. **Clone the repository**:
+```bash
+git clone <repository-url>
+cd leo-pgvector
+```
+
+2. **Install dependencies**:
+```bash
+# Using uv (recommended)
+uv sync
+
+# Or using pip
+pip install -r requirements.txt
+```
+
+3. **Start PostgreSQL with pgvector**:
+```bash
+# Start the Docker container (PostgreSQL 17 with pgvector)
+docker-compose up -d
+
+# Verify the container is running
+docker ps
+
+# The database will be available at localhost:54320
+```
+
+4. **Configure environment**:
+```bash
+# The .env file is already configured for Docker
+# DATABASE_URL=postgresql://postgres:postgres@localhost:54320/leo_pgvector
+```
+
+## Project Structure
+
+```
+leo-pgvector/
+...
+```
+
+
+## File Descriptions
+
+### `models.py`
+SQLAlchemy ORM models defining the database schema:
+- `User`: User accounts
+- `UserDocument`: Wikipedia articles metadata
+- `UserDocumentChunk`: Text chunks with 768-dimensional embeddings
+
+### `schemas.py`
+Data validation and serialization schemas:
+- `DocumentItem`: Dataset item validation
+- `SearchRequest/Response`: API models for search
+- `DatabaseConfig`: Database configuration
+- `IngestionConfig`: Data ingestion settings
+- `IndexConfig`: Index parameters
+
+### `setup.py`
+Database initialization and data ingestion:
+- Creates pgvector extension and RRF function
+- Sets up tables and indexes
+- Downloads Cohere Wikipedia dataset
+- Populates database with users and documents
+
+### `query.py`
+Search implementation with three modes:
+- **Semantic Search**: Vector similarity using cosine distance
+- **Keyword Search**: Full-text search with ts_rank_cd
+- **Hybrid Search**: RRF combination of both methods
+
+## Usage
+
+### 1. Initialize Database
+
+```bash
+# Quick test with 1000 documents
+python setup.py --drop --users 100 --max-docs 10 --dataset-split "train[:1000]"
+
+# Full dataset (486K documents) - Takes ~30-60 minutes
+python setup.py --drop --users 1000 --max-docs 500 --dataset-split "train"
+
+# Options:
+#   --drop           Drop existing tables before setup
+#   --skip-data      Skip data ingestion (schema only)
+#   --users N        Number of users to create (default: 1000)
+#   --max-docs N     Max documents per user (default: 10)
+#   --dataset-split  Dataset portion to load:
+#                    "train[:1000]" for testing (1K docs)
+#                    "train[:5000]" for development (5K docs)
+#                    "train" for full dataset (486K docs)
+```
+
+### 2. Run Searches
+
+```bash
+# Run example search with sample data
+python query.py --example
+
+# Keyword search
+python query.py "machine learning" --type keyword --limit 10
+
+# Hybrid search (requires embedding)
+python query.py "artificial intelligence" --type hybrid --limit 10
+
+# User-scoped search
+python query.py "science" --user-id 1 --type keyword
+
+# Fetch full parent documents for search results
+python query.py "machine learning" --type hybrid --fetch-docs
+
+# Options:
+#   --type {semantic,keyword,hybrid}  Search type (default: hybrid)
+#   --limit N                    Results limit (default: 10)
+#   --depth N                    Search depth per method (default: 40)
+#   --rrf-k N                   RRF constant (default: 50)
+#   --user-id N                 Filter by user ID
+#   --fetch-docs                 Fetch full parent documents for results
+```
+
+### 3. Python API Usage
+
+```python
+from query import SearchEngine
+from schemas import SearchRequest, SearchType
+
+# Initialize engine
+engine = SearchEngine()
+
+# Create search request
+request = SearchRequest(
+    query_text="machine learning algorithms",
+    embedding=your_embedding_vector,  # 768-dimensional
+    search_type=SearchType.HYBRID,
+    limit=10,
+    search_depth=40,
+    rrf_k=50,
+    user_id=None  # Optional user filter
+)
+
+# Execute search
+response = engine.search(request)
+
+# Access results
+for result in response.results:
+    print(f"{result['title']}: {result['score']}")
+
+# Fetch parent documents (2-query pattern)
+from query import fetch_parent_documents, create_enriched_results
+
+# After getting search results
+results = engine.hybrid_search_function(
+    embedding=embedding,
+    query_text="machine learning",
+    limit=10
+)
+
+# Fetch unique parent documents in single batch query
+documents_map = fetch_parent_documents(engine.engine, results)
+
+# Enrich chunks with their parent documents
+enriched_results = create_enriched_results(results, documents_map)
+
+# Access both chunk and full document
+for item in enriched_results:
+    chunk = item['chunk']
+    document = item['document']  # Full parent document with all chunks
+    print(f"Chunk from document: {document['title']}")
+    print(f"Document has {document['chunk_count']} total chunks")
+```
+
+### 4. Performance Benchmarking
+
+#### Standard Performance Benchmark
+```bash
+# Run comprehensive benchmark with default settings (20 queries per test)
+python bench.py
+
+# Run with more queries for more accurate results
+python bench.py --queries 50
+
+# Run with fewer queries for quick testing
+python bench.py --queries 5
+
+# The benchmark tests:
+#   - No Filter: Baseline performance without any filtering
+#   - User Only: Performance with user_id filtering
+#   - User + Attributes: Additional filtering on regular columns
+#   - User + JSONB: Additional filtering on JSONB metadata
+#   - User + All Filters: Combined filtering scenarios
+#
+# Results include:
+#   - Mean, median, min, max latencies
+#   - Standard deviation
+#   - P95 and P99 percentiles
+#   - Comparison across vector, text, and hybrid search
+#   - Results saved to sql-out/benchmark_results_TIMESTAMP.json
+```
+
+#### Recall/Precision Evaluation
+
+Generate benchmark queries and evaluate search quality:
+
+```bash
+# Method 1: Generate simple benchmark queries
+python generate_bench_data.py
+# Creates: data/benchmark_queries_TIMESTAMP.csv and .json
+
+# Method 2: Generate challenging queries with Google Gemini AI
+export GOOGLE_API_KEY="your-api-key"  # Set your Google AI API key
+python generate_bench_gemini.py --chunks 20 --queries 3
+# Creates: data/gemini_benchmark_TIMESTAMP.csv and .json
+
+# Run recall/precision evaluation on generated queries
+python run_evaluation.py data/gemini_benchmark_TIMESTAMP.csv --limit 10
+
+# Evaluation metrics include:
+#   - Recall@1, @5, @10: Percentage of queries where ground truth appears in top K
+#   - MRR (Mean Reciprocal Rank): Average of 1/rank for each query
+#   - Average position when found
+#   - Hits found: How many queries found their ground truth
+#   - Average latency per search type
+```
+
+#### Using Gemini for Query Generation
+
+The `llm.py` module provides intelligent query generation:
+
+```python
+from llm import GeminiQueryGenerator
+
+# Initialize with API key
+generator = GeminiQueryGenerator(api_key="your-key")
+
+# Generate challenging queries from text
+chunk_text = "Your document chunk text here..."
+queries = generator.generate_queries(chunk_text, num_queries=5)
+
+# Queries are ranked by difficulty (1 = most challenging)
+for i, query in enumerate(queries, 1):
+    print(f"Difficulty {i}: {query}")
+```
+
+### 5. Direct Database Setup
+
+```python
+from setup import DatabaseSetup, DataIngestion
+from schemas import IngestionConfig
+
+# Initialize database
+db_setup = DatabaseSetup()
+engine = db_setup.initialize(drop_existing=True)
+
+# Ingest data
+config = IngestionConfig(
+    num_users=1000,
+    max_documents_per_user=10,
+    dataset_split="train[:5000]"
+)
+ingestion = DataIngestion(engine, config)
+stats = ingestion.run()
+```
+
+## Database Schema
+
+### Tables
+- `users`: User accounts with names
+- `user_documents`: Document metadata (title, URL, wiki_id)
+- `user_document_chunks`: Text chunks with vector embeddings
+
+### Indexes
+- **HNSW Index**: Fast vector similarity search
+- **GIN Index**: Full-text search on text content
+- **B-tree Indexes**: Foreign key relationships
+
+### Functions
+- `hybrid_search()`: Stored function for efficient hybrid search with RRF scoring
+- `fetch_parent_documents()`: Batch fetch documents with deduplication
+
+## Search Methods
+
+### Semantic Search
+- Uses pgvector's inner product operator (`<#>`) for better performance
+- HNSW index for efficient vector similarity search
+- 768-dimensional embeddings (Cohere)
+- Finds conceptually similar content
+
+### Keyword Search
+- PostgreSQL's tsearch2 with English dictionary
+- GIN index on stored tsvector column
+- Ranking with `ts_rank_cd`
+- Finds exact keyword matches
+
+### Hybrid Search
+- Combines semantic and keyword search using RRF
+- Formula: `score = 1/(semantic_rank + k) + 1/(keyword_rank + k)`
+- Configurable k parameter (default: 50)
+- Best of both worlds: concepts + keywords
+
+### Document Fetching Pattern
+- **2-Query Approach**: First search chunks, then batch fetch documents
+- **Deduplication**: Extract unique document IDs to avoid redundant fetches
+- **Batch Query**: Single SQL query retrieves all parent documents
+- **O(1) Lookup**: Efficient mapping structure for chunk-to-document association
+- **Performance**: Optimized for multiple chunks from same document (common in search results)
+
+## Performance Tuning
+
+### Index Parameters
+```python
+IndexConfig(
+    hnsw_m=16,                  # HNSW connections
+    hnsw_ef_construction=256,   # Build quality
+    text_dictionary="english"   # Language dictionary
+)
+```
+
+### Search Parameters
+- `search_depth`: Results per method before RRF (default: 40)
+- `rrf_k`: Weight distribution (10-30 for top bias, 50-100 for balance)
+- `limit`: Final results count
+
+## Monitoring
+
+```python
+# Analyze query performance
+from query import SearchEngine
+
+engine = SearchEngine()
+metrics = engine.analyze_query_performance(request)
+```
+
+## Dataset
+
+Uses [Cohere/wikipedia-22-12-simple-embeddings](https://huggingface.co/datasets/Cohere/wikipedia-22-12-simple-embeddings):
+- Wikipedia articles in simple English
+- Pre-computed 768-dimensional embeddings
+- ~485K documents with multiple chunks each
+
+## Docker Management
+
+```bash
+# Start the database
+docker-compose up -d
+
+# Stop the database
+docker-compose down
+
+# View logs
+docker-compose logs -f pgvector
+
+# Connect to the database
+docker exec -it leo-pgvector-db psql -U postgres -d leo_pgvector
+
+# Reset everything (including data)
+docker-compose down -v
+docker-compose up -d
+```
+
+## Troubleshooting
+
+### PostgreSQL Connection Issues
+```bash
+# Check if Docker container is running
+docker ps | grep leo-pgvector-db
+
+# Check container logs
+docker logs leo-pgvector-db
+
+# Test connection
+psql postgresql://postgres:postgres@localhost:54320/leo_pgvector
+
+# If port 54320 is in use, edit docker-compose.yml to use a different port
+```
+
+### pgvector Extension
+```sql
+-- Extension is automatically installed in the Docker image
+-- Verify installation
+docker exec -it leo-pgvector-db psql -U postgres -d leo_pgvector -c "SELECT * FROM pg_extension WHERE extname = 'vector';"
+```
+
+### Memory Issues
+- Reduce dataset size: `--dataset-split "train[:1000]"`
+- Lower batch size in IngestionConfig
+- Increase PostgreSQL shared_buffers
+
+## Development
+
+### Running Tests
+```bash
+# Run example searches
+python query.py --example
+
+# Test database setup
+python setup.py --drop --users 10 --dataset-split "train[:100]"
+```
+
+### Code Style
+```bash
+# Format code
+black *.py
+
+# Type checking
+mypy *.py
+```
+
+## License
+
+MIT License - See LICENSE file for details
+
+## References
+
+- [Hybrid Search With PostgreSQL and Pgvector](https://example.com/blog-post)
+- [pgvector Documentation](https://github.com/pgvector/pgvector)
+- [PostgreSQL Full-Text Search](https://www.postgresql.org/docs/current/textsearch.html)
