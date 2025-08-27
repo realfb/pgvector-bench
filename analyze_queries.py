@@ -23,7 +23,7 @@ class QueryAnalyzer:
         self.engine = create_engine(db_url, echo=False)
         
         # Create output directory
-        Path("sql-out").mkdir(exist_ok=True)
+        Path("sql-explain").mkdir(exist_ok=True)
         
         # Get sample data for testing
         self._load_sample_data()
@@ -174,6 +174,11 @@ class QueryAnalyzer:
         """Run EXPLAIN ANALYZE on all query patterns"""
         self.console.print("\n[bold cyan]Running EXPLAIN ANALYZE on Query Patterns[/bold cyan]\n")
         
+        # Track individual query type results for separate files
+        text_search_results = []
+        semantic_search_results = []
+        hybrid_search_results = []
+        
         queries = {
             "vector_no_filter": {
                 "sql": """
@@ -312,7 +317,7 @@ class QueryAnalyzer:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         # Create single output file
-        output_file = Path("sql-out") / f"query_analysis_{timestamp}.txt"
+        output_file = Path("sql-explain") / f"query_analysis_{timestamp}.txt"
         
         with open(output_file, 'w') as f:
             f.write("="*80 + "\n")
@@ -376,6 +381,14 @@ class QueryAnalyzer:
                 
                 self.console.print(f"  [green]✓ {result['total_time_ms']:.2f}ms total time[/green]")
                 
+                # Categorize results for individual files
+                if 'text' in query_name:
+                    text_search_results.append((query_name, query_info, result))
+                elif 'vector' in query_name or 'semantic' in query_name:
+                    semantic_search_results.append((query_name, query_info, result))
+                elif 'hybrid' in query_name:
+                    hybrid_search_results.append((query_name, query_info, result))
+                
             except Exception as e:
                 self.console.print(f"  [red]✗ Error: {e}[/red]")
                 results.append({
@@ -429,10 +442,70 @@ class QueryAnalyzer:
             
             f.write("\n")
         
+        # Save individual files for text, semantic, and hybrid searches
+        self._save_individual_file("text-search-explain.txt", text_search_results, "TEXT SEARCH")
+        self._save_individual_file("semantic-search-explain.txt", semantic_search_results, "SEMANTIC/VECTOR SEARCH")
+        self._save_individual_file("hybrid-search-explain.txt", hybrid_search_results, "HYBRID SEARCH")
+        
         # Display summary table
         self.display_summary(results)
         
         self.console.print(f"\n[green]Full analysis saved to: {output_file}[/green]")
+        self.console.print(f"[green]Individual files saved to sql-explain/[/green]")
+    
+    def _save_individual_file(self, filename, results_list, query_type):
+        """Save individual query analysis to separate files"""
+        if not results_list:
+            return
+            
+        output_file = Path("sql-explain") / filename
+        
+        with open(output_file, 'w') as f:
+            f.write("="*80 + "\n")
+            f.write(f"{query_type} QUERY ANALYSIS\n")
+            f.write("="*80 + "\n")
+            f.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
+            
+            for query_name, query_info, result in results_list:
+                f.write("\n" + "="*80 + "\n")
+                f.write(f"Query: {query_name.replace('_', ' ').title()}\n")
+                f.write("="*80 + "\n\n")
+                
+                # Summary stats
+                f.write("PERFORMANCE SUMMARY:\n")
+                f.write(f"Total Time:     {result['total_time_ms']:.3f} ms\n")
+                f.write(f"Execution Time: {result['execution_time_ms']:.3f} ms\n")
+                f.write(f"Planning Time:  {result['planning_time_ms']:.3f} ms\n")
+                f.write(f"Rows Returned:  {result['rows_returned']}\n")
+                f.write(f"Total Cost:     {result['total_cost']:.2f}\n")
+                f.write("\n")
+                
+                # Query parameters
+                f.write("PARAMETERS:\n")
+                for param_name, param_value in query_info["params"].items():
+                    if param_name == "embedding":
+                        f.write(f"  {param_name}: [768-dimensional vector]\n")
+                    elif isinstance(param_value, str) and len(param_value) > 50:
+                        f.write(f"  {param_name}: {param_value[:50]}...\n")
+                    else:
+                        f.write(f"  {param_name}: {param_value}\n")
+                f.write("\n")
+                
+                # SQL Query
+                f.write("SQL QUERY:\n")
+                f.write("-"*40 + "\n")
+                sql_lines = query_info["sql"].strip().split('\n')
+                for line in sql_lines:
+                    if line.strip():
+                        f.write(line.strip() + "\n")
+                f.write("\n")
+                
+                # EXPLAIN output
+                f.write("EXECUTION PLAN:\n")
+                f.write("-"*40 + "\n")
+                explain_output = self.format_explain_output(result["full_plan"])
+                f.write(explain_output + "\n")
+                f.write("\n")
     
     def display_summary(self, results):
         """Display summary table of all queries"""

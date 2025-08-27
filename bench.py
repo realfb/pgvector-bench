@@ -267,6 +267,112 @@ class SearchBenchmark:
         
         return results
     
+    def calculate_rrf_scores(self, vector_results: List[Dict], text_results: List[Dict], k: int = 60) -> List[Dict]:
+        """Calculate RRF scores in Python for two sets of results"""
+        # Create dictionaries with ranks (use 'id' as the key)
+        vector_ranks = {row['id']: idx + 1 for idx, row in enumerate(vector_results)}
+        text_ranks = {row['id']: idx + 1 for idx, row in enumerate(text_results)}
+        
+        # Get all unique chunk IDs
+        all_ids = set(vector_ranks.keys()) | set(text_ranks.keys())
+        
+        # Calculate RRF scores
+        results = []
+        for chunk_id in all_ids:
+            v_rank = vector_ranks.get(chunk_id, 1000)  # High rank if not found
+            t_rank = text_ranks.get(chunk_id, 1000)
+            
+            rrf_score = (1.0 / (k + v_rank)) + (1.0 / (k + t_rank))
+            
+            # Get the original row data from whichever result set has it
+            if chunk_id in vector_ranks:
+                row_data = vector_results[vector_ranks[chunk_id] - 1].copy()
+            else:
+                row_data = text_results[text_ranks[chunk_id] - 1].copy()
+            
+            row_data['rrf_score'] = rrf_score
+            row_data['vector_rank'] = v_rank if v_rank < 1000 else None
+            row_data['text_rank'] = t_rank if t_rank < 1000 else None
+            row_data['chunk_id'] = chunk_id  # Add chunk_id for consistency
+            results.append(row_data)
+        
+        return results
+    
+    def benchmark_hybrid_two_queries(self, filter_type: str, limit: int = 10) -> List[BenchmarkResult]:
+        """Benchmark hybrid search using two separate queries combined in Python"""
+        results = []
+        
+        for query_data in self.queries:
+            # Skip if no embedding available
+            if 'embedding' not in query_data:
+                continue
+                
+            user_id = query_data['ground_truth_user_id']
+            embedding = query_data['embedding']
+            query_text = query_data['query_text']
+            
+            # Two-query approach always requires user_id
+            if filter_type == "no_filter":
+                continue
+            
+            # Measure total time and component times
+            total_start = time.time()
+            
+            # Query 1: Vector search
+            vector_start = time.time()
+            vector_results, _ = self.search.vector_search(
+                user_id=user_id,
+                embedding=embedding,
+                limit=40  # Get more results for RRF
+            )
+            vector_time = (time.time() - vector_start) * 1000
+            
+            # Query 2: Text search
+            text_start = time.time()
+            text_results, _ = self.search.text_search(
+                user_id=user_id,
+                query_text=query_text,
+                limit=40  # Get more results for RRF
+            )
+            text_time = (time.time() - text_start) * 1000
+            
+            # RRF combination in Python
+            rrf_start = time.time()
+            combined = self.calculate_rrf_scores(vector_results, text_results, k=60)
+            # Sort by RRF score and take top results
+            combined.sort(key=lambda x: x['rrf_score'], reverse=True)
+            final_results = combined[:limit]
+            rrf_time = (time.time() - rrf_start) * 1000
+            
+            total_latency = (time.time() - total_start) * 1000
+            
+            # Check if ground truth was found (use 'chunk_id' or 'id')
+            found_ids = [row.get('chunk_id', row.get('id')) for row in final_results]
+            ground_truth_id = query_data['ground_truth_chunk_id']
+            found = ground_truth_id in found_ids
+            rank = found_ids.index(ground_truth_id) + 1 if found else None
+            
+            # Store detailed timing info in the result
+            result = BenchmarkResult(
+                query_id=query_data['query_id'],
+                query_text=query_data['query_text'],
+                latency_ms=total_latency,
+                result_count=len(final_results),
+                filter_type=filter_type,
+                found_ground_truth=found,
+                ground_truth_rank=rank,
+                ground_truth_chunk_id=ground_truth_id
+            )
+            
+            # Add component timing as attributes
+            result.vector_ms = vector_time
+            result.text_ms = text_time
+            result.rrf_ms = rrf_time
+            
+            results.append(result)
+        
+        return results
+    
     def benchmark_hybrid_search(self, filter_type: str, limit: int = 10) -> List[BenchmarkResult]:
         """Benchmark hybrid search combining vector and text search"""
         results = []
@@ -344,7 +450,8 @@ class SearchBenchmark:
         scenarios = {
             "vector": ["no_filter", "user_only", "user_jsonb", "user_jsonb_complex"],
             "text": ["no_filter", "user_only"],
-            "hybrid": ["user_only"]  # Hybrid requires user_id
+            "hybrid": ["user_only"],  # Hybrid requires user_id
+            "hybrid_two_queries": ["user_only"]  # Two-query hybrid approach
         }
         
         all_results = {}
@@ -366,14 +473,20 @@ class SearchBenchmark:
                         results = self.benchmark_vector_search(filter_type, limit)
                     elif search_type == "text":
                         results = self.benchmark_text_search(filter_type, limit)
-                    else:  # hybrid
+                    elif search_type == "hybrid":
                         results = self.benchmark_hybrid_search(filter_type, limit)
+                    else:  # hybrid_two_queries
+                        results = self.benchmark_hybrid_two_queries(filter_type, limit)
                     
                     all_results[search_type][filter_type] = results
                     progress.advance(task)
         
         # Display results
         self.display_results(all_results)
+        
+        # Display hybrid comparison if both methods were run
+        if "hybrid" in all_results and "hybrid_two_queries" in all_results:
+            self.display_hybrid_comparison(all_results)
         
         # Save detailed results
         self.save_results(all_results)
@@ -424,6 +537,66 @@ class SearchBenchmark:
                 )
         
         self.console.print(acc_table)
+    
+    def display_hybrid_comparison(self, all_results: Dict):
+        """Display detailed comparison of hybrid search approaches"""
+        self.console.print("\n[bold cyan]Hybrid Search Method Comparison[/bold cyan]")
+        
+        # Get results for both approaches
+        db_function_results = all_results["hybrid"]["user_only"]
+        two_query_results = all_results["hybrid_two_queries"]["user_only"]
+        
+        # Calculate metrics for both
+        db_metrics = self.calculate_metrics(db_function_results)
+        tq_metrics = self.calculate_metrics(two_query_results)
+        
+        # Component timing for two-query approach
+        vector_times = [r.vector_ms for r in two_query_results if hasattr(r, 'vector_ms')]
+        text_times = [r.text_ms for r in two_query_results if hasattr(r, 'text_ms')]
+        rrf_times = [r.rrf_ms for r in two_query_results if hasattr(r, 'rrf_ms')]
+        
+        # Create comparison table
+        comp_table = Table(show_header=True, header_style="bold magenta")
+        comp_table.add_column("Method", style="cyan")
+        comp_table.add_column("Mean (ms)", justify="right")
+        comp_table.add_column("Median (ms)", justify="right")
+        comp_table.add_column("StdDev", justify="right")
+        comp_table.add_column("Recall %", justify="right")
+        comp_table.add_column("Details", style="dim")
+        
+        comp_table.add_row(
+            "DB Function (Single Query)",
+            f"{db_metrics['mean']:.2f}",
+            f"{db_metrics['median']:.2f}",
+            f"{db_metrics['stdev']:.2f}",
+            f"{db_metrics['recall']:.1f}",
+            "CTE with RRF in PostgreSQL"
+        )
+        
+        comp_table.add_row(
+            "Two Separate Queries",
+            f"{tq_metrics['mean']:.2f}",
+            f"{tq_metrics['median']:.2f}",
+            f"{tq_metrics['stdev']:.2f}",
+            f"{tq_metrics['recall']:.1f}",
+            f"Vector: {mean(vector_times) if vector_times else 0:.1f}ms, Text: {mean(text_times) if text_times else 0:.1f}ms, RRF: {mean(rrf_times) if rrf_times else 0:.1f}ms"
+        )
+        
+        self.console.print(comp_table)
+        
+        # Show performance difference
+        speedup = tq_metrics['mean'] / db_metrics['mean'] if db_metrics['mean'] > 0 else 1
+        if speedup > 1:
+            self.console.print(f"\n[green]✓ DB Function is {speedup:.2f}x faster than Two Queries[/green]")
+        else:
+            self.console.print(f"\n[yellow]⚠ Two Queries is {1/speedup:.2f}x faster than DB Function[/yellow]")
+        
+        # Component breakdown for two-query approach
+        if vector_times and text_times and rrf_times:
+            self.console.print(f"\n[dim]Two-Query Component Breakdown:[/dim]")
+            self.console.print(f"  Vector Search: {mean(vector_times):.1f}ms ({mean(vector_times)/tq_metrics['mean']*100:.0f}%)")
+            self.console.print(f"  Text Search:   {mean(text_times):.1f}ms ({mean(text_times)/tq_metrics['mean']*100:.0f}%)")
+            self.console.print(f"  RRF Scoring:   {mean(rrf_times):.1f}ms ({mean(rrf_times)/tq_metrics['mean']*100:.0f}%)")
     
     def save_results(self, all_results: Dict):
         """Save detailed results to CSV"""

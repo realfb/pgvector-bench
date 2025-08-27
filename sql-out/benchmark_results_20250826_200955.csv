@@ -1,0 +1,401 @@
+search_type,filter_type,query_id,query_text,latency_ms,found_ground_truth,ground_truth_rank
+vector,no_filter,1,Patson Daka Leicester City,414.49594497680664,True,1
+vector,no_filter,2,Zambian footballers in Europe,231.36615753173828,False,
+vector,no_filter,3,Jade Goody Celebrity Big Brother controversy,322.4830627441406,True,2
+vector,no_filter,4,Jack Tweed what happened,485.1100444793701,False,
+vector,no_filter,5,Alesha Dixon solo career after Mis-Teeq,241.7600154876709,True,5
+vector,no_filter,6,Fired Up album reviews,203.15122604370117,True,1
+vector,no_filter,7,Myanmar election fraud 2020,205.3229808807373,True,3
+vector,no_filter,8,Min Aung Hlaing role in Myanmar coup,109.61365699768066,True,6
+vector,no_filter,9,transgender model vogue paris,191.23411178588867,True,1
+vector,no_filter,10,Valentina Sampaio transgender activist,208.65797996520996,True,2
+vector,no_filter,11,Lingua Franca Nova grammar,151.87501907348633,False,
+vector,no_filter,12,How to ask questions in Lingua Franca Nova,83.91404151916504,True,1
+vector,no_filter,13,The Last Airbender earth kingdom revolution,126.5711784362793,True,1
+vector,no_filter,14,Aang captured Fire Nation,172.74188995361328,False,
+vector,no_filter,15,Teenage Mutant Ninja Turtles popularity timeline,165.77482223510742,True,3
+vector,no_filter,16,TMNT 1987 series success,141.9539451599121,True,2
+vector,no_filter,17,Curtiss P-40 Warhawk specifications,137.1142864227295,True,1
+vector,no_filter,18,Flying Tigers shark mouth planes,140.1500701904297,True,2
+vector,no_filter,19,Ora Namir Israeli politician,140.47908782958984,True,1
+vector,no_filter,20,Israeli ambassador to China 1996,134.31501388549805,True,2
+vector,no_filter,21,Gomer Pyle USMC episodes,210.19482612609863,True,1
+vector,no_filter,22,Andy Griffith show spin offs,137.31908798217773,False,
+vector,no_filter,23,Maarten Biesheuvel books,180.42969703674316,True,1
+vector,no_filter,24,Dutch authors 20th century,100.56114196777344,False,
+vector,no_filter,25,Kirthar National Park location,129.41408157348633,True,2
+vector,no_filter,26,Wildlife reserves Sindh Pakistan,98.4349250793457,True,1
+vector,no_filter,27,Homeless World Cup documentary,112.42198944091797,False,
+vector,no_filter,28,Kicking It movie Susan Koch,146.06523513793945,False,
+vector,no_filter,29,Muzaffarabad district population,123.25572967529297,True,1
+vector,no_filter,30,Jhelum river valley,90.69299697875977,False,
+vector,no_filter,31,Kenta Kobayashi wrestling career,99.51591491699219,True,2
+vector,no_filter,32,Pro Wrestling Noah champions,67.11006164550781,True,2
+vector,no_filter,33,What is biodiversity?,150.33388137817383,True,2
+vector,no_filter,34,Natural heritage vs biodiversity,78.90009880065918,True,1
+vector,no_filter,35,Dunaliella salina uses,138.62204551696777,True,1
+vector,no_filter,36,pink algae supplements,76.00593566894531,True,2
+vector,no_filter,37,Chemical education research definition,152.67395973205566,True,2
+vector,no_filter,38,physics education research CER,125.12397766113281,False,
+vector,no_filter,39,Can we know anything for certain?,119.91000175476074,True,1
+vector,no_filter,40,Descartes I think therefore I am explained,99.62224960327148,True,7
+vector,no_filter,41,Sanamahi Ahong Khong Chingba festival Imphal,97.59521484375,True,2
+vector,no_filter,42,Meitei chariot pulling festival revival 2018,60.73808670043945,True,1
+vector,no_filter,43,5145 Pholus orbit compared to Saturn and Neptune,119.46511268615723,True,1
+vector,no_filter,44,Centaur object closest approach to planet since 764 BC,56.68306350708008,True,3
+vector,no_filter,45,Citroen AX replacement,110.1529598236084,True,1
+vector,no_filter,46,Proton Tiara Malaysia history,118.5760498046875,True,1
+vector,no_filter,47,Petr Eben organ music Musica Dominicalis,154.87003326416016,True,1
+vector,no_filter,48,Czech folk music influence on Petr Eben,94.52295303344727,True,1
+vector,no_filter,49,Hamid Karzai languages spoken,95.39294242858887,True,1
+vector,no_filter,50,Karzai family in United States,134.89389419555664,True,1
+vector,user_only,1,Patson Daka Leicester City,100.2037525177002,True,1
+vector,user_only,2,Zambian footballers in Europe,4.131078720092773,True,1
+vector,user_only,3,Jade Goody Celebrity Big Brother controversy,13.681173324584961,True,1
+vector,user_only,4,Jack Tweed what happened,6.893157958984375,True,1
+vector,user_only,5,Alesha Dixon solo career after Mis-Teeq,33.514976501464844,True,1
+vector,user_only,6,Fired Up album reviews,2.343893051147461,True,1
+vector,user_only,7,Myanmar election fraud 2020,20.63584327697754,True,1
+vector,user_only,8,Min Aung Hlaing role in Myanmar coup,2.145051956176758,True,5
+vector,user_only,9,transgender model vogue paris,21.61264419555664,True,1
+vector,user_only,10,Valentina Sampaio transgender activist,3.1249523162841797,True,2
+vector,user_only,11,Lingua Franca Nova grammar,23.871183395385742,False,
+vector,user_only,12,How to ask questions in Lingua Franca Nova,3.4160614013671875,True,1
+vector,user_only,13,The Last Airbender earth kingdom revolution,7.3032379150390625,True,1
+vector,user_only,14,Aang captured Fire Nation,2.7539730072021484,True,1
+vector,user_only,15,Teenage Mutant Ninja Turtles popularity timeline,30.152320861816406,True,2
+vector,user_only,16,TMNT 1987 series success,3.2041072845458984,True,1
+vector,user_only,17,Curtiss P-40 Warhawk specifications,36.87906265258789,True,1
+vector,user_only,18,Flying Tigers shark mouth planes,2.7561187744140625,True,1
+vector,user_only,19,Ora Namir Israeli politician,24.748802185058594,True,1
+vector,user_only,20,Israeli ambassador to China 1996,2.598285675048828,True,1
+vector,user_only,21,Gomer Pyle USMC episodes,22.05204963684082,True,1
+vector,user_only,22,Andy Griffith show spin offs,3.5598278045654297,True,1
+vector,user_only,23,Maarten Biesheuvel books,13.039827346801758,True,1
+vector,user_only,24,Dutch authors 20th century,2.3500919342041016,True,1
+vector,user_only,25,Kirthar National Park location,6.584882736206055,True,1
+vector,user_only,26,Wildlife reserves Sindh Pakistan,3.1549930572509766,True,1
+vector,user_only,27,Homeless World Cup documentary,33.37979316711426,True,1
+vector,user_only,28,Kicking It movie Susan Koch,3.238201141357422,True,1
+vector,user_only,29,Muzaffarabad district population,5.83195686340332,True,1
+vector,user_only,30,Jhelum river valley,2.2399425506591797,True,1
+vector,user_only,31,Kenta Kobayashi wrestling career,16.39699935913086,True,2
+vector,user_only,32,Pro Wrestling Noah champions,2.768278121948242,True,1
+vector,user_only,33,What is biodiversity?,13.873100280761719,True,2
+vector,user_only,34,Natural heritage vs biodiversity,2.7098655700683594,True,1
+vector,user_only,35,Dunaliella salina uses,21.501779556274414,True,1
+vector,user_only,36,pink algae supplements,3.41796875,True,1
+vector,user_only,37,Chemical education research definition,27.755022048950195,True,2
+vector,user_only,38,physics education research CER,3.548860549926758,True,1
+vector,user_only,39,Can we know anything for certain?,23.478031158447266,True,1
+vector,user_only,40,Descartes I think therefore I am explained,3.9801597595214844,True,1
+vector,user_only,41,Sanamahi Ahong Khong Chingba festival Imphal,18.290996551513672,True,1
+vector,user_only,42,Meitei chariot pulling festival revival 2018,4.184722900390625,True,1
+vector,user_only,43,5145 Pholus orbit compared to Saturn and Neptune,56.855201721191406,True,1
+vector,user_only,44,Centaur object closest approach to planet since 764 BC,2.5119781494140625,True,1
+vector,user_only,45,Citroen AX replacement,33.78605842590332,True,1
+vector,user_only,46,Proton Tiara Malaysia history,4.169225692749023,True,1
+vector,user_only,47,Petr Eben organ music Musica Dominicalis,20.205020904541016,True,1
+vector,user_only,48,Czech folk music influence on Petr Eben,2.871990203857422,True,1
+vector,user_only,49,Hamid Karzai languages spoken,31.158924102783203,True,1
+vector,user_only,50,Karzai family in United States,3.431081771850586,True,1
+vector,user_jsonb,1,Patson Daka Leicester City,2.588033676147461,True,1
+vector,user_jsonb,2,Zambian footballers in Europe,0.5979537963867188,True,1
+vector,user_jsonb,3,Jade Goody Celebrity Big Brother controversy,0.5600452423095703,True,1
+vector,user_jsonb,4,Jack Tweed what happened,0.5431175231933594,True,1
+vector,user_jsonb,5,Alesha Dixon solo career after Mis-Teeq,0.6363391876220703,True,1
+vector,user_jsonb,6,Fired Up album reviews,2.405881881713867,True,1
+vector,user_jsonb,7,Myanmar election fraud 2020,0.904083251953125,True,1
+vector,user_jsonb,8,Min Aung Hlaing role in Myanmar coup,0.6060600280761719,True,3
+vector,user_jsonb,9,transgender model vogue paris,0.5481243133544922,True,1
+vector,user_jsonb,10,Valentina Sampaio transgender activist,0.5469322204589844,True,1
+vector,user_jsonb,11,Lingua Franca Nova grammar,0.6730556488037109,True,10
+vector,user_jsonb,12,How to ask questions in Lingua Franca Nova,0.7050037384033203,True,1
+vector,user_jsonb,13,The Last Airbender earth kingdom revolution,0.7059574127197266,True,1
+vector,user_jsonb,14,Aang captured Fire Nation,0.5190372467041016,True,1
+vector,user_jsonb,15,Teenage Mutant Ninja Turtles popularity timeline,0.5769729614257812,True,2
+vector,user_jsonb,16,TMNT 1987 series success,0.5712509155273438,True,1
+vector,user_jsonb,17,Curtiss P-40 Warhawk specifications,0.5228519439697266,True,1
+vector,user_jsonb,18,Flying Tigers shark mouth planes,0.7390975952148438,True,1
+vector,user_jsonb,19,Ora Namir Israeli politician,0.9016990661621094,True,1
+vector,user_jsonb,20,Israeli ambassador to China 1996,0.84686279296875,True,1
+vector,user_jsonb,21,Gomer Pyle USMC episodes,1.1782646179199219,True,1
+vector,user_jsonb,22,Andy Griffith show spin offs,0.9801387786865234,True,1
+vector,user_jsonb,23,Maarten Biesheuvel books,0.8959770202636719,True,1
+vector,user_jsonb,24,Dutch authors 20th century,0.7970333099365234,True,1
+vector,user_jsonb,25,Kirthar National Park location,0.8680820465087891,True,1
+vector,user_jsonb,26,Wildlife reserves Sindh Pakistan,0.9281635284423828,True,1
+vector,user_jsonb,27,Homeless World Cup documentary,0.827789306640625,True,1
+vector,user_jsonb,28,Kicking It movie Susan Koch,0.9341239929199219,True,1
+vector,user_jsonb,29,Muzaffarabad district population,0.9338855743408203,True,1
+vector,user_jsonb,30,Jhelum river valley,0.8461475372314453,True,1
+vector,user_jsonb,31,Kenta Kobayashi wrestling career,1.2450218200683594,True,1
+vector,user_jsonb,32,Pro Wrestling Noah champions,0.8780956268310547,True,1
+vector,user_jsonb,33,What is biodiversity?,1.5659332275390625,True,2
+vector,user_jsonb,34,Natural heritage vs biodiversity,5.640983581542969,True,1
+vector,user_jsonb,35,Dunaliella salina uses,2.7060508728027344,True,1
+vector,user_jsonb,36,pink algae supplements,2.110004425048828,True,1
+vector,user_jsonb,37,Chemical education research definition,0.7772445678710938,True,1
+vector,user_jsonb,38,physics education research CER,0.6570816040039062,True,1
+vector,user_jsonb,39,Can we know anything for certain?,0.7748603820800781,True,1
+vector,user_jsonb,40,Descartes I think therefore I am explained,0.8709430694580078,True,1
+vector,user_jsonb,41,Sanamahi Ahong Khong Chingba festival Imphal,0.7181167602539062,True,1
+vector,user_jsonb,42,Meitei chariot pulling festival revival 2018,2.2230148315429688,True,1
+vector,user_jsonb,43,5145 Pholus orbit compared to Saturn and Neptune,1.1870861053466797,True,1
+vector,user_jsonb,44,Centaur object closest approach to planet since 764 BC,1.0068416595458984,True,1
+vector,user_jsonb,45,Citroen AX replacement,0.9973049163818359,True,1
+vector,user_jsonb,46,Proton Tiara Malaysia history,0.9560585021972656,True,1
+vector,user_jsonb,47,Petr Eben organ music Musica Dominicalis,2.920866012573242,True,1
+vector,user_jsonb,48,Czech folk music influence on Petr Eben,1.4948844909667969,True,1
+vector,user_jsonb,49,Hamid Karzai languages spoken,1.3918876647949219,True,1
+vector,user_jsonb,50,Karzai family in United States,1.055002212524414,True,1
+vector,user_jsonb_complex,1,Patson Daka Leicester City,6.618022918701172,True,1
+vector,user_jsonb_complex,2,Zambian footballers in Europe,4.776954650878906,True,1
+vector,user_jsonb_complex,3,Jade Goody Celebrity Big Brother controversy,1.27410888671875,True,1
+vector,user_jsonb_complex,4,Jack Tweed what happened,0.8902549743652344,True,1
+vector,user_jsonb_complex,5,Alesha Dixon solo career after Mis-Teeq,1.0488033294677734,True,1
+vector,user_jsonb_complex,6,Fired Up album reviews,1.291036605834961,True,1
+vector,user_jsonb_complex,7,Myanmar election fraud 2020,1.004934310913086,True,1
+vector,user_jsonb_complex,8,Min Aung Hlaing role in Myanmar coup,0.9150505065917969,True,2
+vector,user_jsonb_complex,9,transgender model vogue paris,1.2059211730957031,True,1
+vector,user_jsonb_complex,10,Valentina Sampaio transgender activist,4.075050354003906,True,1
+vector,user_jsonb_complex,11,Lingua Franca Nova grammar,1.3298988342285156,True,7
+vector,user_jsonb_complex,12,How to ask questions in Lingua Franca Nova,1.3191699981689453,True,1
+vector,user_jsonb_complex,13,The Last Airbender earth kingdom revolution,0.8871555328369141,True,1
+vector,user_jsonb_complex,14,Aang captured Fire Nation,0.8170604705810547,True,1
+vector,user_jsonb_complex,15,Teenage Mutant Ninja Turtles popularity timeline,1.0271072387695312,True,1
+vector,user_jsonb_complex,16,TMNT 1987 series success,1.0030269622802734,True,1
+vector,user_jsonb_complex,17,Curtiss P-40 Warhawk specifications,1.7838478088378906,True,1
+vector,user_jsonb_complex,18,Flying Tigers shark mouth planes,1.010894775390625,True,1
+vector,user_jsonb_complex,19,Ora Namir Israeli politician,5.897045135498047,True,1
+vector,user_jsonb_complex,20,Israeli ambassador to China 1996,1.3852119445800781,True,1
+vector,user_jsonb_complex,21,Gomer Pyle USMC episodes,0.7028579711914062,True,1
+vector,user_jsonb_complex,22,Andy Griffith show spin offs,0.9620189666748047,True,1
+vector,user_jsonb_complex,23,Maarten Biesheuvel books,0.7739067077636719,True,1
+vector,user_jsonb_complex,24,Dutch authors 20th century,0.7779598236083984,True,1
+vector,user_jsonb_complex,25,Kirthar National Park location,0.6971359252929688,True,1
+vector,user_jsonb_complex,26,Wildlife reserves Sindh Pakistan,0.6089210510253906,True,1
+vector,user_jsonb_complex,27,Homeless World Cup documentary,0.6306171417236328,True,1
+vector,user_jsonb_complex,28,Kicking It movie Susan Koch,0.7760524749755859,True,1
+vector,user_jsonb_complex,29,Muzaffarabad district population,0.7193088531494141,True,1
+vector,user_jsonb_complex,30,Jhelum river valley,0.6630420684814453,True,1
+vector,user_jsonb_complex,31,Kenta Kobayashi wrestling career,1.1911392211914062,True,1
+vector,user_jsonb_complex,32,Pro Wrestling Noah champions,1.013040542602539,True,1
+vector,user_jsonb_complex,33,What is biodiversity?,0.9450912475585938,True,2
+vector,user_jsonb_complex,34,Natural heritage vs biodiversity,0.888824462890625,True,1
+vector,user_jsonb_complex,35,Dunaliella salina uses,0.9510517120361328,True,1
+vector,user_jsonb_complex,36,pink algae supplements,1.0039806365966797,True,1
+vector,user_jsonb_complex,37,Chemical education research definition,1.3990402221679688,True,1
+vector,user_jsonb_complex,38,physics education research CER,0.8220672607421875,True,1
+vector,user_jsonb_complex,39,Can we know anything for certain?,0.7460117340087891,True,1
+vector,user_jsonb_complex,40,Descartes I think therefore I am explained,0.7810592651367188,True,1
+vector,user_jsonb_complex,41,Sanamahi Ahong Khong Chingba festival Imphal,0.7410049438476562,True,1
+vector,user_jsonb_complex,42,Meitei chariot pulling festival revival 2018,0.7631778717041016,True,1
+vector,user_jsonb_complex,43,5145 Pholus orbit compared to Saturn and Neptune,0.7779598236083984,True,1
+vector,user_jsonb_complex,44,Centaur object closest approach to planet since 764 BC,0.7741451263427734,True,1
+vector,user_jsonb_complex,45,Citroen AX replacement,0.7910728454589844,True,1
+vector,user_jsonb_complex,46,Proton Tiara Malaysia history,0.7739067077636719,True,1
+vector,user_jsonb_complex,47,Petr Eben organ music Musica Dominicalis,1.2199878692626953,True,1
+vector,user_jsonb_complex,48,Czech folk music influence on Petr Eben,0.8130073547363281,True,1
+vector,user_jsonb_complex,49,Hamid Karzai languages spoken,0.9920597076416016,True,1
+vector,user_jsonb_complex,50,Karzai family in United States,0.74005126953125,True,1
+text,no_filter,1,Patson Daka Leicester City,107.20992088317871,True,1
+text,no_filter,2,Zambian footballers in Europe,6.666898727416992,False,
+text,no_filter,3,Jade Goody Celebrity Big Brother controversy,6.453037261962891,True,1
+text,no_filter,4,Jack Tweed what happened,3.772735595703125,False,
+text,no_filter,5,Alesha Dixon solo career after Mis-Teeq,6.568193435668945,False,
+text,no_filter,6,Fired Up album reviews,5.573034286499023,False,
+text,no_filter,7,Myanmar election fraud 2020,4.683017730712891,True,2
+text,no_filter,8,Min Aung Hlaing role in Myanmar coup,7.168054580688477,False,
+text,no_filter,9,transgender model vogue paris,4.350900650024414,True,1
+text,no_filter,10,Valentina Sampaio transgender activist,3.0510425567626953,False,
+text,no_filter,11,Lingua Franca Nova grammar,2.866983413696289,False,
+text,no_filter,12,How to ask questions in Lingua Franca Nova,4.186868667602539,False,
+text,no_filter,13,The Last Airbender earth kingdom revolution,5.7659149169921875,False,
+text,no_filter,14,Aang captured Fire Nation,7.398128509521484,True,4
+text,no_filter,15,Teenage Mutant Ninja Turtles popularity timeline,6.124973297119141,False,
+text,no_filter,16,TMNT 1987 series success,5.019903182983398,False,
+text,no_filter,17,Curtiss P-40 Warhawk specifications,3.774881362915039,False,
+text,no_filter,18,Flying Tigers shark mouth planes,7.888078689575195,False,
+text,no_filter,19,Ora Namir Israeli politician,8.234977722167969,True,1
+text,no_filter,20,Israeli ambassador to China 1996,5.0220489501953125,True,1
+text,no_filter,21,Gomer Pyle USMC episodes,3.4809112548828125,False,
+text,no_filter,22,Andy Griffith show spin offs,5.447864532470703,False,
+text,no_filter,23,Maarten Biesheuvel books,3.2367706298828125,False,
+text,no_filter,24,Dutch authors 20th century,9.145021438598633,False,
+text,no_filter,25,Kirthar National Park location,4.802227020263672,False,
+text,no_filter,26,Wildlife reserves Sindh Pakistan,3.412961959838867,True,1
+text,no_filter,27,Homeless World Cup documentary,5.40471076965332,True,1
+text,no_filter,28,Kicking It movie Susan Koch,4.416942596435547,True,1
+text,no_filter,29,Muzaffarabad district population,4.575967788696289,True,2
+text,no_filter,30,Jhelum river valley,9.681224822998047,False,
+text,no_filter,31,Kenta Kobayashi wrestling career,3.484964370727539,False,
+text,no_filter,32,Pro Wrestling Noah champions,3.1909942626953125,True,2
+text,no_filter,33,What is biodiversity?,87.23616600036621,True,6
+text,no_filter,34,Natural heritage vs biodiversity,5.60307502746582,False,
+text,no_filter,35,Dunaliella salina uses,4.323005676269531,True,1
+text,no_filter,36,pink algae supplements,3.6411285400390625,True,1
+text,no_filter,37,Chemical education research definition,10.698795318603516,False,
+text,no_filter,38,physics education research CER,3.7109851837158203,True,1
+text,no_filter,39,Can we know anything for certain?,9.521007537841797,True,2
+text,no_filter,40,Descartes I think therefore I am explained,4.537820816040039,False,
+text,no_filter,41,Sanamahi Ahong Khong Chingba festival Imphal,3.966808319091797,True,2
+text,no_filter,42,Meitei chariot pulling festival revival 2018,4.45103645324707,False,
+text,no_filter,43,5145 Pholus orbit compared to Saturn and Neptune,4.492044448852539,False,
+text,no_filter,44,Centaur object closest approach to planet since 764 BC,6.128072738647461,True,1
+text,no_filter,45,Citroen AX replacement,10.904788970947266,False,
+text,no_filter,46,Proton Tiara Malaysia history,4.970312118530273,False,
+text,no_filter,47,Petr Eben organ music Musica Dominicalis,4.3468475341796875,False,
+text,no_filter,48,Czech folk music influence on Petr Eben,4.381895065307617,False,
+text,no_filter,49,Hamid Karzai languages spoken,3.5588741302490234,False,
+text,no_filter,50,Karzai family in United States,6.381988525390625,False,
+text,user_only,1,Patson Daka Leicester City,2.7348995208740234,True,1
+text,user_only,2,Zambian footballers in Europe,1.4560222625732422,False,
+text,user_only,3,Jade Goody Celebrity Big Brother controversy,1.4450550079345703,True,1
+text,user_only,4,Jack Tweed what happened,1.0519027709960938,False,
+text,user_only,5,Alesha Dixon solo career after Mis-Teeq,1.177072525024414,False,
+text,user_only,6,Fired Up album reviews,1.0743141174316406,False,
+text,user_only,7,Myanmar election fraud 2020,1.4719963073730469,True,1
+text,user_only,8,Min Aung Hlaing role in Myanmar coup,1.2540817260742188,False,
+text,user_only,9,transgender model vogue paris,1.1909008026123047,True,1
+text,user_only,10,Valentina Sampaio transgender activist,1.271963119506836,False,
+text,user_only,11,Lingua Franca Nova grammar,1.62506103515625,False,
+text,user_only,12,How to ask questions in Lingua Franca Nova,1.2569427490234375,False,
+text,user_only,13,The Last Airbender earth kingdom revolution,1.1930465698242188,False,
+text,user_only,14,Aang captured Fire Nation,1.5139579772949219,True,2
+text,user_only,15,Teenage Mutant Ninja Turtles popularity timeline,1.6682147979736328,False,
+text,user_only,16,TMNT 1987 series success,1.0440349578857422,False,
+text,user_only,17,Curtiss P-40 Warhawk specifications,0.9810924530029297,False,
+text,user_only,18,Flying Tigers shark mouth planes,0.9541511535644531,False,
+text,user_only,19,Ora Namir Israeli politician,6.163835525512695,True,1
+text,user_only,20,Israeli ambassador to China 1996,1.7981529235839844,True,1
+text,user_only,21,Gomer Pyle USMC episodes,1.589059829711914,False,
+text,user_only,22,Andy Griffith show spin offs,1.5611648559570312,False,
+text,user_only,23,Maarten Biesheuvel books,8.213043212890625,False,
+text,user_only,24,Dutch authors 20th century,1.4109611511230469,False,
+text,user_only,25,Kirthar National Park location,1.3010501861572266,False,
+text,user_only,26,Wildlife reserves Sindh Pakistan,1.4338493347167969,True,1
+text,user_only,27,Homeless World Cup documentary,1.3780593872070312,True,1
+text,user_only,28,Kicking It movie Susan Koch,1.1258125305175781,True,1
+text,user_only,29,Muzaffarabad district population,1.0218620300292969,True,1
+text,user_only,30,Jhelum river valley,1.110076904296875,False,
+text,user_only,31,Kenta Kobayashi wrestling career,1.405954360961914,False,
+text,user_only,32,Pro Wrestling Noah champions,1.7900466918945312,True,1
+text,user_only,33,What is biodiversity?,1.3918876647949219,True,1
+text,user_only,34,Natural heritage vs biodiversity,1.3511180877685547,False,
+text,user_only,35,Dunaliella salina uses,1.107931137084961,True,1
+text,user_only,36,pink algae supplements,1.0302066802978516,True,1
+text,user_only,37,Chemical education research definition,1.2350082397460938,False,
+text,user_only,38,physics education research CER,1.4388561248779297,True,1
+text,user_only,39,Can we know anything for certain?,1.544952392578125,True,1
+text,user_only,40,Descartes I think therefore I am explained,1.2307167053222656,False,
+text,user_only,41,Sanamahi Ahong Khong Chingba festival Imphal,1.2907981872558594,True,1
+text,user_only,42,Meitei chariot pulling festival revival 2018,1.1799335479736328,False,
+text,user_only,43,5145 Pholus orbit compared to Saturn and Neptune,1.3167858123779297,False,
+text,user_only,44,Centaur object closest approach to planet since 764 BC,1.8031597137451172,True,1
+text,user_only,45,Citroen AX replacement,1.5323162078857422,False,
+text,user_only,46,Proton Tiara Malaysia history,2.2420883178710938,False,
+text,user_only,47,Petr Eben organ music Musica Dominicalis,1.664876937866211,False,
+text,user_only,48,Czech folk music influence on Petr Eben,1.3971328735351562,False,
+text,user_only,49,Hamid Karzai languages spoken,1.4750957489013672,False,
+text,user_only,50,Karzai family in United States,2.4230480194091797,False,
+hybrid,user_only,1,Patson Daka Leicester City,7.500171661376953,True,1
+hybrid,user_only,2,Zambian footballers in Europe,3.423929214477539,True,1
+hybrid,user_only,3,Jade Goody Celebrity Big Brother controversy,3.3969879150390625,True,1
+hybrid,user_only,4,Jack Tweed what happened,2.7971267700195312,True,1
+hybrid,user_only,5,Alesha Dixon solo career after Mis-Teeq,10.365962982177734,True,1
+hybrid,user_only,6,Fired Up album reviews,2.8030872344970703,True,1
+hybrid,user_only,7,Myanmar election fraud 2020,8.209943771362305,True,1
+hybrid,user_only,8,Min Aung Hlaing role in Myanmar coup,2.8808116912841797,True,5
+hybrid,user_only,9,transgender model vogue paris,3.576040267944336,True,1
+hybrid,user_only,10,Valentina Sampaio transgender activist,2.930879592895508,True,2
+hybrid,user_only,11,Lingua Franca Nova grammar,8.293867111206055,False,
+hybrid,user_only,12,How to ask questions in Lingua Franca Nova,3.431081771850586,True,1
+hybrid,user_only,13,The Last Airbender earth kingdom revolution,3.1080245971679688,True,1
+hybrid,user_only,14,Aang captured Fire Nation,2.8967857360839844,True,1
+hybrid,user_only,15,Teenage Mutant Ninja Turtles popularity timeline,4.782915115356445,True,2
+hybrid,user_only,16,TMNT 1987 series success,3.1113624572753906,True,1
+hybrid,user_only,17,Curtiss P-40 Warhawk specifications,2.8219223022460938,True,1
+hybrid,user_only,18,Flying Tigers shark mouth planes,3.1290054321289062,True,1
+hybrid,user_only,19,Ora Namir Israeli politician,3.2460689544677734,True,1
+hybrid,user_only,20,Israeli ambassador to China 1996,3.257274627685547,True,1
+hybrid,user_only,21,Gomer Pyle USMC episodes,3.7679672241210938,True,1
+hybrid,user_only,22,Andy Griffith show spin offs,2.9871463775634766,True,1
+hybrid,user_only,23,Maarten Biesheuvel books,6.754159927368164,True,1
+hybrid,user_only,24,Dutch authors 20th century,12.228727340698242,True,1
+hybrid,user_only,25,Kirthar National Park location,2.1309852600097656,True,1
+hybrid,user_only,26,Wildlife reserves Sindh Pakistan,1.7657279968261719,True,1
+hybrid,user_only,27,Homeless World Cup documentary,2.4950504302978516,True,1
+hybrid,user_only,28,Kicking It movie Susan Koch,3.534078598022461,True,1
+hybrid,user_only,29,Muzaffarabad district population,2.500772476196289,True,1
+hybrid,user_only,30,Jhelum river valley,1.9040107727050781,True,1
+hybrid,user_only,31,Kenta Kobayashi wrestling career,1.9688606262207031,True,2
+hybrid,user_only,32,Pro Wrestling Noah champions,1.7631053924560547,True,1
+hybrid,user_only,33,What is biodiversity?,2.590179443359375,True,2
+hybrid,user_only,34,Natural heritage vs biodiversity,2.8829574584960938,True,1
+hybrid,user_only,35,Dunaliella salina uses,2.894163131713867,True,1
+hybrid,user_only,36,pink algae supplements,6.611108779907227,True,1
+hybrid,user_only,37,Chemical education research definition,3.359079360961914,True,2
+hybrid,user_only,38,physics education research CER,4.270792007446289,True,1
+hybrid,user_only,39,Can we know anything for certain?,3.6377906799316406,True,1
+hybrid,user_only,40,Descartes I think therefore I am explained,2.8307437896728516,True,1
+hybrid,user_only,41,Sanamahi Ahong Khong Chingba festival Imphal,3.526926040649414,True,1
+hybrid,user_only,42,Meitei chariot pulling festival revival 2018,1.867055892944336,True,1
+hybrid,user_only,43,5145 Pholus orbit compared to Saturn and Neptune,1.7921924591064453,True,1
+hybrid,user_only,44,Centaur object closest approach to planet since 764 BC,5.982160568237305,True,1
+hybrid,user_only,45,Citroen AX replacement,4.676103591918945,True,1
+hybrid,user_only,46,Proton Tiara Malaysia history,5.496978759765625,True,1
+hybrid,user_only,47,Petr Eben organ music Musica Dominicalis,5.743265151977539,True,1
+hybrid,user_only,48,Czech folk music influence on Petr Eben,2.9158592224121094,True,1
+hybrid,user_only,49,Hamid Karzai languages spoken,2.928018569946289,True,1
+hybrid,user_only,50,Karzai family in United States,2.5930404663085938,True,1
+hybrid_two_queries,user_only,1,Patson Daka Leicester City,4.889249801635742,True,1
+hybrid_two_queries,user_only,2,Zambian footballers in Europe,6.790876388549805,True,1
+hybrid_two_queries,user_only,3,Jade Goody Celebrity Big Brother controversy,6.309986114501953,True,1
+hybrid_two_queries,user_only,4,Jack Tweed what happened,6.355047225952148,True,1
+hybrid_two_queries,user_only,5,Alesha Dixon solo career after Mis-Teeq,4.262208938598633,True,1
+hybrid_two_queries,user_only,6,Fired Up album reviews,3.9501190185546875,True,1
+hybrid_two_queries,user_only,7,Myanmar election fraud 2020,4.040002822875977,True,1
+hybrid_two_queries,user_only,8,Min Aung Hlaing role in Myanmar coup,4.576921463012695,True,5
+hybrid_two_queries,user_only,9,transgender model vogue paris,5.943059921264648,True,1
+hybrid_two_queries,user_only,10,Valentina Sampaio transgender activist,5.988121032714844,True,2
+hybrid_two_queries,user_only,11,Lingua Franca Nova grammar,5.379915237426758,False,
+hybrid_two_queries,user_only,12,How to ask questions in Lingua Franca Nova,5.894899368286133,True,1
+hybrid_two_queries,user_only,13,The Last Airbender earth kingdom revolution,6.163120269775391,True,1
+hybrid_two_queries,user_only,14,Aang captured Fire Nation,5.666255950927734,True,1
+hybrid_two_queries,user_only,15,Teenage Mutant Ninja Turtles popularity timeline,4.79888916015625,True,2
+hybrid_two_queries,user_only,16,TMNT 1987 series success,4.547834396362305,True,1
+hybrid_two_queries,user_only,17,Curtiss P-40 Warhawk specifications,3.643035888671875,True,1
+hybrid_two_queries,user_only,18,Flying Tigers shark mouth planes,3.7848949432373047,True,1
+hybrid_two_queries,user_only,19,Ora Namir Israeli politician,6.654262542724609,True,1
+hybrid_two_queries,user_only,20,Israeli ambassador to China 1996,5.484104156494141,True,1
+hybrid_two_queries,user_only,21,Gomer Pyle USMC episodes,4.212856292724609,True,1
+hybrid_two_queries,user_only,22,Andy Griffith show spin offs,4.190921783447266,True,1
+hybrid_two_queries,user_only,23,Maarten Biesheuvel books,3.6690235137939453,True,1
+hybrid_two_queries,user_only,24,Dutch authors 20th century,3.7398338317871094,True,1
+hybrid_two_queries,user_only,25,Kirthar National Park location,3.917694091796875,True,1
+hybrid_two_queries,user_only,26,Wildlife reserves Sindh Pakistan,4.836797714233398,True,1
+hybrid_two_queries,user_only,27,Homeless World Cup documentary,4.221916198730469,True,1
+hybrid_two_queries,user_only,28,Kicking It movie Susan Koch,4.346132278442383,True,1
+hybrid_two_queries,user_only,29,Muzaffarabad district population,3.7620067596435547,True,1
+hybrid_two_queries,user_only,30,Jhelum river valley,3.8499832153320312,True,1
+hybrid_two_queries,user_only,31,Kenta Kobayashi wrestling career,3.536701202392578,True,2
+hybrid_two_queries,user_only,32,Pro Wrestling Noah champions,9.900093078613281,True,1
+hybrid_two_queries,user_only,33,What is biodiversity?,4.935026168823242,True,1
+hybrid_two_queries,user_only,34,Natural heritage vs biodiversity,4.506111145019531,True,1
+hybrid_two_queries,user_only,35,Dunaliella salina uses,4.347085952758789,True,1
+hybrid_two_queries,user_only,36,pink algae supplements,3.924131393432617,True,1
+hybrid_two_queries,user_only,37,Chemical education research definition,3.9119720458984375,True,2
+hybrid_two_queries,user_only,38,physics education research CER,6.103038787841797,True,1
+hybrid_two_queries,user_only,39,Can we know anything for certain?,4.233837127685547,True,1
+hybrid_two_queries,user_only,40,Descartes I think therefore I am explained,4.217863082885742,True,1
+hybrid_two_queries,user_only,41,Sanamahi Ahong Khong Chingba festival Imphal,4.83393669128418,True,1
+hybrid_two_queries,user_only,42,Meitei chariot pulling festival revival 2018,4.13203239440918,True,1
+hybrid_two_queries,user_only,43,5145 Pholus orbit compared to Saturn and Neptune,4.207849502563477,True,1
+hybrid_two_queries,user_only,44,Centaur object closest approach to planet since 764 BC,4.088640213012695,True,1
+hybrid_two_queries,user_only,45,Citroen AX replacement,3.1919479370117188,True,1
+hybrid_two_queries,user_only,46,Proton Tiara Malaysia history,3.880739212036133,True,1
+hybrid_two_queries,user_only,47,Petr Eben organ music Musica Dominicalis,4.252910614013672,True,1
+hybrid_two_queries,user_only,48,Czech folk music influence on Petr Eben,4.62794303894043,True,1
+hybrid_two_queries,user_only,49,Hamid Karzai languages spoken,8.682966232299805,True,1
+hybrid_two_queries,user_only,50,Karzai family in United States,6.554126739501953,True,1
