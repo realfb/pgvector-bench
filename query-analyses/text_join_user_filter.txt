@@ -1,0 +1,51 @@
+================================================================================
+Query: text_join_user_filter
+Timestamp: 2025-09-28T23:22:36.269432
+================================================================================
+
+QUERY:
+----------------------------------------
+SELECT c.id
+               FROM user_document_chunks c
+               JOIN user_documents d ON c.user_document_id = d.id
+               WHERE d.user_id = %s
+               AND c.text_search_vector @@ websearch_to_tsquery('english', %s)
+               ORDER BY ts_rank_cd(c.text_search_vector, websearch_to_tsquery('english', %s)) DESC
+               LIMIT 10
+
+Parameters: 3 provided
+
+EXECUTION PLAN:
+----------------------------------------
+Limit  (cost=367.60..367.62 rows=9 width=8) (actual time=0.179..0.180 rows=10 loops=1)
+  Buffers: shared hit=140
+  ->  Sort  (cost=367.60..367.62 rows=9 width=8) (actual time=0.178..0.179 rows=10 loops=1)
+        Sort Key: (ts_rank_cd(c.text_search_vector, '''document'''::tsquery)) DESC
+        Sort Method: quicksort  Memory: 25kB
+        Buffers: shared hit=140
+        ->  Hash Join  (cost=56.52..367.46 rows=9 width=8) (actual time=0.092..0.176 rows=11 loops=1)
+              Hash Cond: (c.user_document_id = d.id)
+              Buffers: shared hit=140
+              ->  Bitmap Heap Scan on user_document_chunks c  (cost=17.54..328.23 rows=86 width=369) (actual time=0.020..0.089 rows=122 loops=1)
+                    Recheck Cond: (text_search_vector @@ '''document'''::tsquery)
+                    Heap Blocks: exact=111
+                    Buffers: shared hit=115
+                    ->  Bitmap Index Scan on idx_chunks_text_search_gin  (cost=0.00..17.51 rows=86 width=0) (actual time=0.011..0.011 rows=122 loops=1)
+                          Index Cond: (text_search_vector @@ '''document'''::tsquery)
+                          Buffers: shared hit=4
+              ->  Hash  (cost=35.35..35.35 rows=290 width=4) (actual time=0.069..0.069 rows=290 loops=1)
+                    Buckets: 1024  Batches: 1  Memory Usage: 19kB
+                    Buffers: shared hit=25
+                    ->  Index Scan using idx_documents_user_id on user_documents d  (cost=0.28..35.35 rows=290 width=4) (actual time=0.004..0.045 rows=290 loops=1)
+                          Index Cond: (user_id = 1)
+                          Buffers: shared hit=25
+Planning:
+  Buffers: shared hit=13
+Planning Time: 0.154 ms
+Execution Time: 0.192 ms
+
+TIMING SUMMARY:
+----------------------------------------
+Planning Time: 0.178 ms
+Execution Time: 0.294 ms
+Total Time: 0.472 ms

@@ -1,0 +1,47 @@
+================================================================================
+Query: text_join_no_filter
+Timestamp: 2025-09-28T23:22:36.267088
+================================================================================
+
+QUERY:
+----------------------------------------
+SELECT c.id
+               FROM user_document_chunks c
+               JOIN user_documents d ON c.user_document_id = d.id
+               WHERE c.text_search_vector @@ websearch_to_tsquery('english', %s)
+               ORDER BY ts_rank_cd(c.text_search_vector, websearch_to_tsquery('english', %s)) DESC
+               LIMIT 10
+
+Parameters: 2 provided
+
+EXECUTION PLAN:
+----------------------------------------
+Limit  (cost=395.89..395.91 rows=10 width=8) (actual time=0.250..0.251 rows=10 loops=1)
+  Buffers: shared hit=396
+  ->  Sort  (cost=395.89..396.10 rows=86 width=8) (actual time=0.249..0.250 rows=10 loops=1)
+        Sort Key: (ts_rank_cd(c.text_search_vector, '''document'''::tsquery)) DESC
+        Sort Method: top-N heapsort  Memory: 25kB
+        Buffers: shared hit=396
+        ->  Nested Loop  (cost=17.82..394.03 rows=86 width=8) (actual time=0.026..0.238 rows=122 loops=1)
+              Buffers: shared hit=396
+              ->  Bitmap Heap Scan on user_document_chunks c  (cost=17.54..328.23 rows=86 width=369) (actual time=0.017..0.060 rows=122 loops=1)
+                    Recheck Cond: (text_search_vector @@ '''document'''::tsquery)
+                    Heap Blocks: exact=111
+                    Buffers: shared hit=115
+                    ->  Bitmap Index Scan on idx_chunks_text_search_gin  (cost=0.00..17.51 rows=86 width=0) (actual time=0.009..0.009 rows=122 loops=1)
+                          Index Cond: (text_search_vector @@ '''document'''::tsquery)
+                          Buffers: shared hit=4
+              ->  Index Only Scan using user_documents_pkey on user_documents d  (cost=0.28..0.76 rows=1 width=4) (actual time=0.001..0.001 rows=1 loops=122)
+                    Index Cond: (id = c.user_document_id)
+                    Heap Fetches: 0
+                    Buffers: shared hit=245
+Planning:
+  Buffers: shared hit=13
+Planning Time: 0.129 ms
+Execution Time: 0.261 ms
+
+TIMING SUMMARY:
+----------------------------------------
+Planning Time: 0.174 ms
+Execution Time: 0.307 ms
+Total Time: 0.481 ms

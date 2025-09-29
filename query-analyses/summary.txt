@@ -1,0 +1,30 @@
+================================================================================
+QUERY ANALYSIS SUMMARY
+Generated: 2025-09-28T23:22:37.161166
+================================================================================
+
+ALL QUERIES RANKED BY TOTAL TIME:
+----------------------------------------
+text_denorm_user_filter                      0.17ms (exec:    0.10ms, plan:   0.07ms)
+text_denorm_jsonb_filter                     0.38ms (exec:    0.24ms, plan:   0.13ms)
+text_join_user_filter                        0.47ms (exec:    0.29ms, plan:   0.18ms)
+text_join_no_filter                          0.48ms (exec:    0.31ms, plan:   0.17ms)
+vector_denorm_jsonb_filter                   1.27ms (exec:    1.09ms, plan:   0.18ms)
+vector_join_jsonb_filter                     1.28ms (exec:    1.07ms, plan:   0.21ms)
+vector_denorm_force_index                    1.59ms (exec:    1.51ms, plan:   0.08ms)
+hybrid_denorm_no_filter                      3.58ms (exec:    2.27ms, plan:   1.31ms)
+vector_denorm_no_filter                      6.42ms (exec:    6.02ms, plan:   0.40ms)
+vector_denorm_composite_filter               7.62ms (exec:    7.55ms, plan:   0.07ms)
+vector_join_no_filter                        8.47ms (exec:    1.33ms, plan:   7.15ms)
+hybrid_denorm_user_filter                    9.61ms (exec:    9.46ms, plan:   0.15ms)
+vector_denorm_user_filter                   15.48ms (exec:   15.41ms, plan:   0.07ms)
+hybrid_join_user_filter                     16.03ms (exec:   15.60ms, plan:   0.43ms)
+text_denorm_no_filter                       20.11ms (exec:    0.47ms, plan:  19.64ms)
+vector_join_user_filter                     21.05ms (exec:   20.92ms, plan:   0.13ms)
+vector_join_no_nestloop                    558.73ms (exec:  558.53ms, plan:   0.20ms)
+
+HIGHLIGHTS:
+----------------------------------------
+Fastest: text_denorm_user_filter (0.17ms)
+Slowest: vector_join_no_nestloop (558.73ms)
+Range: 3306.1x difference

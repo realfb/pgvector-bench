@@ -1,19 +1,20 @@
 from datetime import datetime, timezone
-from typing import Optional, List, Dict, Any
+from typing import Any, Dict, List, Optional
+
+from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    String,
-    Float,
-    Text,
-    ForeignKey,
-    UniqueConstraint,
-    Computed,
-    Index,
     DDL,
+    Computed,
+    Float,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    UniqueConstraint,
     event,
 )
+from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy.dialects.postgresql import TSVECTOR, JSONB
-from pgvector.sqlalchemy import Vector
 
 
 class Base(DeclarativeBase):
@@ -76,12 +77,10 @@ class UserDocumentChunk(Base):
     __tablename__ = "user_document_chunks"
     __table_args__ = (
         UniqueConstraint("user_document_id", "paragraph_id", name="_document_chunk_uc"),
-        
         # User-specific indexes for efficient filtering
         Index("idx_chunks_user_id", "user_id"),
         Index("idx_chunks_user_document_id", "user_document_id"),
         Index("idx_chunks_text_search_gin", "text_search_vector", postgresql_using="gin"),
-        
         # HNSW index for vector search (single column only - HNSW doesn't support composite)
         # The user_id filtering will use idx_chunks_user_id index
         Index(
@@ -91,7 +90,6 @@ class UserDocumentChunk(Base):
             postgresql_with={"m": 16, "ef_construction": 64},
             postgresql_ops={"embedding": "vector_ip_ops"},
         ),
-        
         # Metadata index
         Index("idx_chunks_meta_gin", "meta", postgresql_using="gin"),
     )
@@ -147,12 +145,12 @@ WITH full_text AS (
         -- Note: ts_rank_cd is not indexable but will only rank matches of the where clause
         -- which shouldn't be too big when filtered by user
         row_number() OVER (
-            ORDER BY ts_rank_cd(text_search_vector, websearch_to_tsquery(query_text)) DESC
+            ORDER BY ts_rank_cd(text_search_vector, websearch_to_tsquery('english', query_text)) DESC
         ) as rank_ix
     FROM user_document_chunks
     WHERE 
         user_id = query_user_id  -- Filter by user first
-        AND text_search_vector @@ websearch_to_tsquery(query_text)
+        AND text_search_vector @@ websearch_to_tsquery('english', query_text)
     ORDER BY rank_ix
     LIMIT LEAST(match_count, 30) * 2
 ),

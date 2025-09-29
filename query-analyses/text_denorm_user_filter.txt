@@ -1,0 +1,45 @@
+================================================================================
+Query: text_denorm_user_filter
+Timestamp: 2025-09-28T23:22:36.262516
+================================================================================
+
+QUERY:
+----------------------------------------
+SELECT id FROM user_document_chunks
+               WHERE user_id = %s
+               AND text_search_vector @@ websearch_to_tsquery('english', %s)
+               ORDER BY ts_rank_cd(text_search_vector, websearch_to_tsquery('english', %s)) DESC
+               LIMIT 10
+
+Parameters: 3 provided
+
+EXECUTION PLAN:
+----------------------------------------
+Limit  (cost=87.13..87.15 rows=8 width=8) (actual time=0.088..0.090 rows=10 loops=1)
+  Buffers: shared hit=19
+  ->  Sort  (cost=87.13..87.15 rows=8 width=8) (actual time=0.088..0.089 rows=10 loops=1)
+        Sort Key: (ts_rank_cd(text_search_vector, '''document'''::tsquery)) DESC
+        Sort Method: quicksort  Memory: 25kB
+        Buffers: shared hit=19
+        ->  Bitmap Heap Scan on user_document_chunks  (cost=55.84..87.01 rows=8 width=8) (actual time=0.077..0.086 rows=11 loops=1)
+              Recheck Cond: ((text_search_vector @@ '''document'''::tsquery) AND (user_id = 1))
+              Heap Blocks: exact=11
+              Buffers: shared hit=19
+              ->  BitmapAnd  (cost=55.84..55.84 rows=8 width=0) (actual time=0.073..0.073 rows=0 loops=1)
+                    Buffers: shared hit=8
+                    ->  Bitmap Index Scan on idx_chunks_text_search_gin  (cost=0.00..17.51 rows=86 width=0) (actual time=0.012..0.012 rows=122 loops=1)
+                          Index Cond: (text_search_vector @@ '''document'''::tsquery)
+                          Buffers: shared hit=4
+                    ->  Bitmap Index Scan on ix_user_document_chunks_user_id  (cost=0.00..38.08 rows=2905 width=0) (actual time=0.056..0.056 rows=2905 loops=1)
+                          Index Cond: (user_id = 1)
+                          Buffers: shared hit=4
+Planning:
+  Buffers: shared hit=1
+Planning Time: 0.071 ms
+Execution Time: 0.097 ms
+
+TIMING SUMMARY:
+----------------------------------------
+Planning Time: 0.066 ms
+Execution Time: 0.103 ms
+Total Time: 0.169 ms

@@ -1,53 +1,41 @@
-"""
-Database setup and data ingestion for leo-pgvector
-"""
-
 import os
 import random
-from typing import Optional
 from collections import defaultdict
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
-from faker import Faker
-from datasets import load_dataset
-from rich import print
 from datetime import datetime, timedelta
-from rich.progress import Progress
+from typing import Optional
+
+from datasets import load_dataset
 from dotenv import load_dotenv
+from faker import Faker
+from rich import print
+from rich.progress import Progress
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session, sessionmaker
 
 from models import Base, User, UserDocument, UserDocumentChunk
-from schemas import DocumentItem, DatabaseConfig, IngestionConfig
+from schemas import DatabaseConfig, DocumentItem, IngestionConfig
 
 load_dotenv()
+
+DATASET_ID="Cohere/wikipedia-22-12-simple-embeddings"
+# DATASET_ID = "maloyan/wikipedia-22-12-en-embeddings-all-MiniLM-L6-v2"
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/leo_pgvector")
 
 
 class DatabaseSetup:
     """Handles database initialization and setup"""
 
-    def __init__(self, config: Optional[DatabaseConfig] = None):
-        if config is None:
-            # Load from environment or use defaults
-            db_url = os.getenv(
-                "DATABASE_URL",
-                "postgresql://postgres:postgres@localhost:5432/leo_pgvector",
-            )
-            # Parse URL if needed, or just use it directly
-            self.db_url = db_url
-        else:
-            self.db_url = config.url
-
+    def __init__(self):
+        self.db_url = DATABASE_URL
         self.engine = None
         self.SessionLocal = None
 
     def connect(self):
         """Establish database connection"""
-        print(
-            f"[bold blue]Connecting to database:[/bold blue] {self.db_url.split('@')[-1]}"
-        )
+        print(f"[bold blue]Connecting to database:[/bold blue] {self.db_url.split('@')[-1]}")
         self.engine = create_engine(self.db_url, echo=False)
         self.SessionLocal = sessionmaker(bind=self.engine)
         return self.engine
-
 
     def create_tables(self, drop_existing: bool = False):
         """Create database tables"""
@@ -58,7 +46,6 @@ class DatabaseSetup:
         print("[bold green]Creating database tables...[/bold green]")
         Base.metadata.create_all(self.engine)
         print("✓ Created database tables")
-
 
     def initialize(self, drop_existing: bool = False):
         """Full database initialization"""
@@ -75,7 +62,7 @@ class DataIngestion:
         self.SessionLocal = sessionmaker(bind=engine)
         self.config = config if config else IngestionConfig()
         self.fake = Faker()
-        
+
         # Categories and subcategories for metadata generation
         self.categories = [
             ("Science", ["Physics", "Chemistry", "Biology", "Astronomy", "Earth Science"]),
@@ -87,9 +74,18 @@ class DataIngestion:
             ("Biography", ["Scientists", "Politicians", "Artists", "Athletes", "Historical Figures"]),
             ("Medicine", ["Diseases", "Treatments", "Anatomy", "Psychology", "Public Health"]),
         ]
-        
-        self.section_types = ["introduction", "overview", "body", "details", "examples", 
-                             "conclusion", "references", "see_also", "external_links"]
+
+        self.section_types = [
+            "introduction",
+            "overview",
+            "body",
+            "details",
+            "examples",
+            "conclusion",
+            "references",
+            "see_also",
+            "external_links",
+        ]
         self.content_types = ["article", "tutorial", "reference", "biography", "list", "timeline"]
         self.difficulty_levels = ["simple", "intermediate", "advanced"]
         self.sentiments = ["positive", "negative", "neutral", "mixed"]
@@ -116,9 +112,7 @@ class DataIngestion:
         """Download and process the Cohere Wikipedia dataset"""
         print(f"[bold green]Loading dataset: {self.config.dataset_split}[/bold green]")
 
-        dataset = load_dataset(
-            "Cohere/wikipedia-22-12-simple-embeddings", split=self.config.dataset_split
-        )
+        dataset = load_dataset(DATASET_ID, split=self.config.dataset_split)
 
         print(f"✓ Loaded {len(dataset)} items from dataset")
         return dataset
@@ -128,16 +122,14 @@ class DataIngestion:
         category, subcategories = random.choice(self.categories)
         total_text = " ".join([chunk.text for chunk in text_chunks])
         word_count = len(total_text.split())
-        
+
         return {
             "category": category,
             "subcategory": random.choice(subcategories) if subcategories else None,
             "difficulty_level": random.choice(self.difficulty_levels),
             "content_type": random.choice(self.content_types),
             "quality_score": round(random.uniform(3.0, 10.0), 1),
-            "last_updated": self.fake.date_time_between(
-                start_date="-2years", end_date="now"
-            ).isoformat(),
+            "last_updated": self.fake.date_time_between(start_date="-2years", end_date="now").isoformat(),
             "editor_count": random.randint(1, 500),
             "reference_count": random.randint(0, 200),
             "word_count": word_count,
@@ -148,13 +140,13 @@ class DataIngestion:
             "language": "en",
             "tags": self.fake.words(nb=random.randint(3, 8), unique=True),
         }
-    
+
     def generate_chunk_metadata(self, text: str, position_in_doc: int, total_chunks: int) -> dict:
         """Generate realistic metadata for a chunk"""
         word_count = len(text.split())
         char_count = len(text)
-        sentence_count = text.count('.') + text.count('!') + text.count('?')
-        
+        sentence_count = text.count(".") + text.count("!") + text.count("?")
+
         # Determine position
         if position_in_doc == 0:
             position = "beginning"
@@ -165,13 +157,13 @@ class DataIngestion:
         else:
             position = "middle"
             section_type = random.choice(["body", "details", "examples"])
-        
+
         # Detect content features
         has_code = any(marker in text for marker in ["```", "def ", "function", "class ", "import "])
         has_math = any(marker in text for marker in ["=", "+", "-", "*", "/", "equation", "formula"])
         has_list = any(marker in text for marker in ["•", "1.", "2.", "- ", "* "])
         has_table = "|" in text and text.count("|") > 4
-        
+
         return {
             "section_type": section_type,
             "position": position,
@@ -218,34 +210,32 @@ class DataIngestion:
         document_urls = list(documents_by_url.keys())
         total_docs = 0
         total_chunks = 0
-        
+
         # Shuffle documents for random distribution
         random.shuffle(document_urls)
-        
+
         # Calculate documents per user for even distribution
         docs_per_user = len(document_urls) // len(users)
         remaining_docs = len(document_urls) % len(users)
-        
+
         # Track which documents have been assigned
         doc_index = 0
 
         with Progress() as progress:
-            task = progress.add_task(
-                "Assigning documents to users...", total=len(users)
-            )
+            task = progress.add_task("Assigning documents to users...", total=len(users))
 
             for user_idx, user in enumerate(users):
                 # Determine number of documents for this user
                 # Add one extra doc to first 'remaining_docs' users to distribute remainder
                 num_docs_for_user = docs_per_user + (1 if user_idx < remaining_docs else 0)
-                
+
                 # Don't exceed max_documents_per_user limit
                 num_docs_for_user = min(num_docs_for_user, self.config.max_documents_per_user)
-                
+
                 # Assign the next batch of documents to this user
-                user_doc_urls = document_urls[doc_index:doc_index + num_docs_for_user]
+                user_doc_urls = document_urls[doc_index : doc_index + num_docs_for_user]
                 doc_index += num_docs_for_user
-                
+
                 # If we've run out of documents, stop
                 if not user_doc_urls:
                     progress.advance(task)
@@ -254,7 +244,7 @@ class DataIngestion:
                 for url in user_doc_urls:
                     chunks = documents_by_url[url]
                     first_chunk = chunks[0]
-                    
+
                     # Generate document metadata
                     doc_metadata = self.generate_document_metadata(first_chunk.title, chunks)
 
@@ -275,10 +265,8 @@ class DataIngestion:
                     # Create chunks
                     for idx, chunk in enumerate(chunks):
                         # Generate chunk metadata
-                        chunk_metadata = self.generate_chunk_metadata(
-                            chunk.text, idx, len(chunks)
-                        )
-                        
+                        chunk_metadata = self.generate_chunk_metadata(chunk.text, idx, len(chunks))
+
                         doc_chunk = UserDocumentChunk(
                             user_document_id=user_doc.id,
                             user_id=user.id,  # Set user_id directly for performance
@@ -354,15 +342,9 @@ def main():
     parser = argparse.ArgumentParser(description="Setup leo-pgvector database")
     parser.add_argument("--drop", action="store_true", help="Drop existing tables")
     parser.add_argument("--skip-data", action="store_true", help="Skip data ingestion")
-    parser.add_argument(
-        "--users", type=int, default=1000, help="Number of users to create"
-    )
-    parser.add_argument(
-        "--max-docs", type=int, default=10, help="Max documents per user"
-    )
-    parser.add_argument(
-        "--dataset-split", default="train[:5000]", help="Dataset split to load"
-    )
+    parser.add_argument("--users", type=int, default=1000, help="Number of users to create")
+    parser.add_argument("--max-docs", type=int, default=10, help="Max documents per user")
+    parser.add_argument("--dataset-split", default="train[:5000]", help="Dataset split to load")
 
     args = parser.parse_args()
 

@@ -1,0 +1,41 @@
+================================================================================
+Query: text_denorm_jsonb_filter
+Timestamp: 2025-09-28T23:22:36.265130
+================================================================================
+
+QUERY:
+----------------------------------------
+SELECT id FROM user_document_chunks
+               WHERE meta ? %s
+               AND text_search_vector @@ websearch_to_tsquery('english', %s)
+               ORDER BY ts_rank_cd(text_search_vector, websearch_to_tsquery('english', %s)) DESC
+               LIMIT 10
+
+Parameters: 3 provided
+
+EXECUTION PLAN:
+----------------------------------------
+Limit  (cost=330.52..330.54 rows=10 width=8) (actual time=0.158..0.159 rows=10 loops=1)
+  Buffers: shared hit=151
+  ->  Sort  (cost=330.52..330.73 rows=86 width=8) (actual time=0.158..0.158 rows=10 loops=1)
+        Sort Key: (ts_rank_cd(text_search_vector, '''document'''::tsquery)) DESC
+        Sort Method: top-N heapsort  Memory: 25kB
+        Buffers: shared hit=151
+        ->  Bitmap Heap Scan on user_document_chunks  (cost=17.54..328.66 rows=86 width=8) (actual time=0.018..0.146 rows=122 loops=1)
+              Recheck Cond: (text_search_vector @@ '''document'''::tsquery)
+              Filter: (meta ? 'word_count'::text)
+              Heap Blocks: exact=111
+              Buffers: shared hit=151
+              ->  Bitmap Index Scan on idx_chunks_text_search_gin  (cost=0.00..17.51 rows=86 width=0) (actual time=0.008..0.009 rows=122 loops=1)
+                    Index Cond: (text_search_vector @@ '''document'''::tsquery)
+                    Buffers: shared hit=4
+Planning:
+  Buffers: shared hit=2
+Planning Time: 0.093 ms
+Execution Time: 0.166 ms
+
+TIMING SUMMARY:
+----------------------------------------
+Planning Time: 0.134 ms
+Execution Time: 0.245 ms
+Total Time: 0.379 ms
