@@ -139,48 +139,55 @@ RETURNS TABLE (
 )
 LANGUAGE SQL
 AS $$
-WITH full_text AS (
-    SELECT 
-        id,
-        -- Note: ts_rank_cd is not indexable but will only rank matches of the where clause
-        -- which shouldn't be too big when filtered by user
-        row_number() OVER (
-            ORDER BY ts_rank_cd(text_search_vector, websearch_to_tsquery('english', query_text)) DESC
-        ) as rank_ix
-    FROM user_document_chunks
-    WHERE 
-        user_id = query_user_id  -- Filter by user first
-        AND text_search_vector @@ websearch_to_tsquery('english', query_text)
-    ORDER BY rank_ix
-    LIMIT LEAST(match_count, 30) * 2
+WITH
+params AS (
+    SELECT
+        LEAST(match_count, 30) AS k,
+        LEAST(match_count, 30) * 2 AS pool_k,
+        NULLIF(trim(query_text), '') AS qtext,
+        websearch_to_tsquery('english', NULLIF(trim(query_text), '')) AS qts
+),
+full_text AS (
+    SELECT id, row_number() OVER (ORDER BY ft_rank DESC) AS rank_ix
+    FROM (
+        SELECT c.id, ts_rank_cd(c.text_search_vector, p.qts) AS ft_rank
+        FROM user_document_chunks c
+        CROSS JOIN params p
+        WHERE c.user_id = query_user_id
+          AND p.qts IS NOT NULL
+          AND c.text_search_vector @@ p.qts
+        ORDER BY ft_rank DESC
+        LIMIT (SELECT pool_k FROM params)
+    ) s
 ),
 semantic AS (
-    SELECT 
-        id,
-        row_number() OVER (ORDER BY embedding <#> query_embedding) as rank_ix
-    FROM user_document_chunks
-    WHERE user_id = query_user_id  -- Filter by user first
-    ORDER BY rank_ix
-    LIMIT LEAST(match_count, 30) * 2
+    SELECT id, row_number() OVER (ORDER BY dist) AS rank_ix
+    FROM (
+        SELECT c.id, c.embedding <#> query_embedding AS dist
+        FROM user_document_chunks c
+        CROSS JOIN params p
+        WHERE c.user_id = query_user_id
+          AND query_embedding IS NOT NULL
+        ORDER BY dist
+        LIMIT (SELECT pool_k FROM params)
+    ) s
 )
-SELECT 
-    user_document_chunks.id,
-    user_document_chunks.user_document_id,
-    user_document_chunks.paragraph_id,
-    user_document_chunks.text,
-    user_document_chunks.meta,
-    user_document_chunks.created_at,
-    COALESCE(1.0 / (rrf_k + full_text.rank_ix), 0.0) * full_text_weight AS k_score,
-    COALESCE(1.0 / (rrf_k + semantic.rank_ix), 0.0) * semantic_weight AS v_score,
-    COALESCE(1.0 / (rrf_k + full_text.rank_ix), 0.0) * full_text_weight +
-    COALESCE(1.0 / (rrf_k + semantic.rank_ix), 0.0) * semantic_weight AS score
-FROM 
-    full_text
-    FULL OUTER JOIN semantic ON full_text.id = semantic.id
-    JOIN user_document_chunks ON COALESCE(full_text.id, semantic.id) = user_document_chunks.id
-ORDER BY 
-    score DESC
-LIMIT LEAST(match_count, 30)
+SELECT
+    c.id,
+    c.user_document_id,
+    c.paragraph_id,
+    c.text,
+    c.meta,
+    c.created_at,
+    COALESCE(1.0 / (rrf_k + ft.rank_ix), 0.0) * full_text_weight AS k_score,
+    COALESCE(1.0 / (rrf_k + se.rank_ix), 0.0) * semantic_weight AS v_score,
+    COALESCE(1.0 / (rrf_k + ft.rank_ix), 0.0) * full_text_weight +
+    COALESCE(1.0 / (rrf_k + se.rank_ix), 0.0) * semantic_weight AS score
+FROM full_text ft
+FULL OUTER JOIN semantic se USING (id)
+JOIN user_document_chunks c ON c.id = COALESCE(ft.id, se.id)
+ORDER BY score DESC
+LIMIT (SELECT k FROM params);
 $$;
 """)
 event.listen(Base.metadata, "after_create", create_hybrid_search)
