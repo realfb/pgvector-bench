@@ -18,7 +18,7 @@ load_dotenv()
 
 DATASET_ID = "Cohere/wikipedia-22-12-simple-embeddings"
 # DATASET_ID = "maloyan/wikipedia-22-12-en-embeddings-all-MiniLM-L6-v2"
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/leo_pgvector")
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54320/leo_pgvector")
 
 
 class DatabaseSetup:
@@ -209,6 +209,7 @@ class DataIngestion:
         document_urls = list(documents_by_url.keys())
         total_docs = 0
         total_chunks = 0
+        docs_since_commit = 0
 
         # Shuffle documents for random distribution
         random.shuffle(document_urls)
@@ -221,7 +222,8 @@ class DataIngestion:
         doc_index = 0
 
         with Progress() as progress:
-            task = progress.add_task("Assigning documents to users...", total=len(users))
+            # Change progress bar to track documents instead of users
+            task = progress.add_task("Processing documents...", total=len(document_urls))
 
             for user_idx, user in enumerate(users):
                 # Determine number of documents for this user
@@ -237,7 +239,6 @@ class DataIngestion:
 
                 # If we've run out of documents, stop
                 if not user_doc_urls:
-                    progress.advance(task)
                     continue
 
                 for url in user_doc_urls:
@@ -260,6 +261,7 @@ class DataIngestion:
                     session.add(user_doc)
                     session.flush()  # Get the ID
                     total_docs += 1
+                    docs_since_commit += 1
 
                     # Create chunks
                     for idx, chunk in enumerate(chunks):
@@ -277,12 +279,16 @@ class DataIngestion:
                         session.add(doc_chunk)
                         total_chunks += 1
 
-                # Commit in batches
-                if (users.index(user) + 1) % self.config.batch_size == 0:
-                    session.commit()
+                    # Commit every batch_size documents (not users!)
+                    if docs_since_commit >= self.config.batch_size:
+                        session.commit()
+                        docs_since_commit = 0
+                        # Update progress with number of docs processed
+                        progress.update(task, completed=total_docs)
 
-                progress.advance(task)
+                    progress.advance(task)
 
+        # Final commit for any remaining documents
         session.commit()
         print(f"✓ Ingested {total_docs} documents with {total_chunks} chunks")
 
@@ -344,6 +350,7 @@ def main():
     parser.add_argument("--users", type=int, default=1000, help="Number of users to create")
     parser.add_argument("--max-docs", type=int, default=10, help="Max documents per user")
     parser.add_argument("--dataset-split", default="train[:5000]", help="Dataset split to load")
+    parser.add_argument("--batch-size", type=int, default=50, help="Batch size for commits")
 
     args = parser.parse_args()
 
@@ -358,6 +365,7 @@ def main():
                 num_users=args.users,
                 max_documents_per_user=args.max_docs,
                 dataset_split=args.dataset_split,
+                batch_size=args.batch_size,
             )
             ingestion = DataIngestion(engine, config)
             ingestion.run()

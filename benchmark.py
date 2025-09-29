@@ -14,13 +14,8 @@ import argparse
 
 load_dotenv()
 
-DB_CONFIG = {
-    "host": os.getenv("DB_HOST", "localhost"),
-    "port": os.getenv("DB_PORT", 54320),
-    "user": os.getenv("DB_USER", "postgres"),
-    "password": os.getenv("DB_PASSWORD", "postgres"),
-    "database": os.getenv("DB_NAME", "leo_pgvector"),
-}
+# Use DATABASE_URL from environment or default
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:54320/leo_pgvector")
 
 
 class SearchType(Enum):
@@ -61,7 +56,7 @@ class BenchResult:
 
 class ComprehensiveBenchmark:
     def __init__(self, queries: int = 30, limit: int = 10, verbose: bool = False):
-        self.conn = psycopg2.connect(**DB_CONFIG)
+        self.conn = psycopg2.connect(DATABASE_URL)
         self.cur = self.conn.cursor(cursor_factory=RealDictCursor)
         self.queries = queries
         self.limit = limit

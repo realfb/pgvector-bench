@@ -161,7 +161,7 @@ class IngestionConfig(BaseModel):
     num_users: int = Field(1000, ge=1, description="Number of users to create")
     max_documents_per_user: int = Field(10, ge=1, description="Max documents per user")
     dataset_split: str = Field("train[:5000]", description="Dataset split to load")
-    batch_size: int = Field(100, ge=1, description="Batch size for ingestion")
+    batch_size: int = Field(50, ge=1, description="Batch size for ingestion")
 
     model_config = ConfigDict(from_attributes=True)
 
