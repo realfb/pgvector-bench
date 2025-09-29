@@ -124,7 +124,9 @@ CREATE OR REPLACE FUNCTION hybrid_search(
     match_count int,
     full_text_weight float DEFAULT 1,
     semantic_weight float DEFAULT 1,
-    rrf_k int DEFAULT 50
+    rrf_k int DEFAULT 50,
+    chunk_meta_filter jsonb DEFAULT NULL,
+    doc_meta_filter jsonb DEFAULT NULL
 )
 RETURNS TABLE (
     id int,
@@ -144,33 +146,47 @@ params AS (
     SELECT
         LEAST(match_count, 30) AS k,
         LEAST(match_count, 30) * 2 AS pool_k,
-        NULLIF(trim(query_text), '') AS qtext,
         websearch_to_tsquery('english', NULLIF(trim(query_text), '')) AS qts
 ),
-full_text AS (
-    SELECT id, row_number() OVER (ORDER BY ft_rank DESC) AS rank_ix
-    FROM (
-        SELECT c.id, ts_rank_cd(c.text_search_vector, p.qts) AS ft_rank
-        FROM user_document_chunks c
-        CROSS JOIN params p
-        WHERE c.user_id = query_user_id
-          AND p.qts IS NOT NULL
-          AND c.text_search_vector @@ p.qts
-        ORDER BY ft_rank DESC
-        LIMIT (SELECT pool_k FROM params)
-    ) s
+-- Full-text: top-K by chunks only
+fts_topk AS (
+  SELECT c.id, c.user_document_id, ts_rank_cd(c.text_search_vector, p.qts) AS ft_rank
+  FROM user_document_chunks c
+  CROSS JOIN params p
+  WHERE c.user_id = query_user_id
+    AND p.qts IS NOT NULL
+    AND c.text_search_vector @@ p.qts
+    AND (chunk_meta_filter IS NULL OR c.meta @> chunk_meta_filter)
+  ORDER BY ft_rank DESC
+  LIMIT (SELECT pool_k FROM params)
 ),
+-- Apply doc filter on the small candidate set, then rank
+full_text AS (
+  SELECT id, row_number() OVER (ORDER BY ft_rank DESC) AS rank_ix
+  FROM fts_topk t
+  WHERE (doc_meta_filter IS NULL OR EXISTS (
+    SELECT 1 FROM user_documents d
+    WHERE d.id = t.user_document_id AND d.meta @> doc_meta_filter
+  ))
+),
+-- Vector: top-K by chunks only (no join)
+vec_topk AS (
+  SELECT c.id, c.user_document_id, c.embedding <#> query_embedding AS dist
+  FROM user_document_chunks c
+  WHERE c.user_id = query_user_id
+    AND query_embedding IS NOT NULL
+    AND (chunk_meta_filter IS NULL OR c.meta @> chunk_meta_filter)
+  ORDER BY dist
+  LIMIT (SELECT pool_k FROM params)
+),
+-- Apply doc filter on the small candidate set, then rank
 semantic AS (
-    SELECT id, row_number() OVER (ORDER BY dist) AS rank_ix
-    FROM (
-        SELECT c.id, c.embedding <#> query_embedding AS dist
-        FROM user_document_chunks c
-        CROSS JOIN params p
-        WHERE c.user_id = query_user_id
-          AND query_embedding IS NOT NULL
-        ORDER BY dist
-        LIMIT (SELECT pool_k FROM params)
-    ) s
+  SELECT id, row_number() OVER (ORDER BY dist) AS rank_ix
+  FROM vec_topk v
+  WHERE (doc_meta_filter IS NULL OR EXISTS (
+    SELECT 1 FROM user_documents d
+    WHERE d.id = v.user_document_id AND d.meta @> doc_meta_filter
+  ))
 )
 SELECT
     c.id,
