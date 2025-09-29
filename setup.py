@@ -1,7 +1,6 @@
 import os
 import random
 from collections import defaultdict
-from datetime import datetime, timedelta
 from typing import Optional
 
 from datasets import load_dataset
@@ -13,11 +12,11 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from models import Base, User, UserDocument, UserDocumentChunk
-from schemas import DatabaseConfig, DocumentItem, IngestionConfig
+from schemas import DocumentItem, IngestionConfig
 
 load_dotenv()
 
-DATASET_ID="Cohere/wikipedia-22-12-simple-embeddings"
+DATASET_ID = "Cohere/wikipedia-22-12-simple-embeddings"
 # DATASET_ID = "maloyan/wikipedia-22-12-en-embeddings-all-MiniLM-L6-v2"
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/leo_pgvector")
 

@@ -1,19 +1,17 @@
 import os
-import json
-import psycopg2
 import psycopg2.extras
 from dotenv import load_dotenv
 from datetime import datetime
 from pathlib import Path
-import time
 
 load_dotenv()
 
+
 class QueryAnalyzer:
     def __init__(self):
-        self.conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+        self.conn = psycopg2.connect(os.getenv("DATABASE_URL"))
         self.cur = self.conn.cursor(cursor_factory=psycopg2.extras.DictCursor)
-        self.output_dir = Path('query-analyses')
+        self.output_dir = Path("query-analyses")
         self.output_dir.mkdir(exist_ok=True)
 
         # Get sample data for testing
@@ -26,10 +24,10 @@ class QueryAnalyzer:
             LIMIT 1
         """)
         sample = self.cur.fetchone()
-        self.embedding = sample['embedding']
-        self.user_id = sample['user_id']
+        self.embedding = sample["embedding"]
+        self.user_id = sample["user_id"]
         self.text_query = "document"  # Simple text query for testing
-        self.document_id = sample['user_document_id']
+        self.document_id = sample["user_document_id"]
 
         # Get JSONB keys
         self.cur.execute("""
@@ -37,8 +35,8 @@ class QueryAnalyzer:
             FROM user_document_chunks
             LIMIT 5
         """)
-        self.jsonb_keys = [row['key'] for row in self.cur.fetchall()]
-        self.jsonb_key = self.jsonb_keys[0] if self.jsonb_keys else 'source'
+        self.jsonb_keys = [row["key"] for row in self.cur.fetchall()]
+        self.jsonb_key = self.jsonb_keys[0] if self.jsonb_keys else "source"
 
     def save_analysis(self, name: str, query: str, params: tuple, analysis: dict):
         """Save query analysis to text file."""
@@ -64,7 +62,7 @@ class QueryAnalyzer:
         output_text.append("-" * 40)
 
         # Add the plan text
-        for row in analysis['plan_rows']:
+        for row in analysis["plan_rows"]:
             output_text.append(row[0])
 
         output_text.append("")
@@ -76,8 +74,8 @@ class QueryAnalyzer:
         output_text.append("")
 
         # Write to file
-        with open(output_file, 'w') as f:
-            f.write('\n'.join(output_text))
+        with open(output_file, "w") as f:
+            f.write("\n".join(output_text))
 
         print(f"✓ {name}: {analysis['total_time']:.2f}ms")
 
@@ -95,11 +93,11 @@ class QueryAnalyzer:
             text_result = self.cur.fetchall()
 
             analysis = {
-                'plan_json': json_result,
-                'plan_rows': text_result,
-                'execution_time': json_result['Execution Time'],
-                'planning_time': json_result['Planning Time'],
-                'total_time': json_result['Execution Time'] + json_result['Planning Time']
+                "plan_json": json_result,
+                "plan_rows": text_result,
+                "execution_time": json_result["Execution Time"],
+                "planning_time": json_result["Planning Time"],
+                "total_time": json_result["Execution Time"] + json_result["Planning Time"],
             }
 
             self.save_analysis(name, query, params, analysis)
@@ -120,7 +118,7 @@ class QueryAnalyzer:
             """SELECT id FROM user_document_chunks
                ORDER BY embedding <#> %s::vector
                LIMIT 10""",
-            (self.embedding,)
+            (self.embedding,),
         )
 
         self.analyze_query(
@@ -129,7 +127,7 @@ class QueryAnalyzer:
                WHERE user_id = %s
                ORDER BY embedding <#> %s::vector
                LIMIT 10""",
-            (self.user_id, self.embedding)
+            (self.user_id, self.embedding),
         )
 
         self.analyze_query(
@@ -138,7 +136,7 @@ class QueryAnalyzer:
                WHERE meta ? %s
                ORDER BY embedding <#> %s::vector
                LIMIT 10""",
-            (self.jsonb_key, self.embedding)
+            (self.jsonb_key, self.embedding),
         )
 
         self.analyze_query(
@@ -147,7 +145,7 @@ class QueryAnalyzer:
                WHERE user_id = %s AND meta ? %s
                ORDER BY embedding <#> %s::vector
                LIMIT 10""",
-            (self.user_id, self.jsonb_key, self.embedding)
+            (self.user_id, self.jsonb_key, self.embedding),
         )
 
         # Vector Search with JOIN
@@ -160,7 +158,7 @@ class QueryAnalyzer:
                JOIN user_documents d ON c.user_document_id = d.id
                ORDER BY c.embedding <#> %s::vector
                LIMIT 10""",
-            (self.embedding,)
+            (self.embedding,),
         )
 
         self.analyze_query(
@@ -171,7 +169,7 @@ class QueryAnalyzer:
                WHERE d.user_id = %s
                ORDER BY c.embedding <#> %s::vector
                LIMIT 10""",
-            (self.user_id, self.embedding)
+            (self.user_id, self.embedding),
         )
 
         self.analyze_query(
@@ -182,7 +180,7 @@ class QueryAnalyzer:
                WHERE c.meta ? %s
                ORDER BY c.embedding <#> %s::vector
                LIMIT 10""",
-            (self.jsonb_key, self.embedding)
+            (self.jsonb_key, self.embedding),
         )
 
         # Text Search Queries
@@ -194,7 +192,7 @@ class QueryAnalyzer:
                WHERE text_search_vector @@ websearch_to_tsquery('english', %s)
                ORDER BY ts_rank_cd(text_search_vector, websearch_to_tsquery('english', %s)) DESC
                LIMIT 10""",
-            (self.text_query, self.text_query)
+            (self.text_query, self.text_query),
         )
 
         self.analyze_query(
@@ -204,7 +202,7 @@ class QueryAnalyzer:
                AND text_search_vector @@ websearch_to_tsquery('english', %s)
                ORDER BY ts_rank_cd(text_search_vector, websearch_to_tsquery('english', %s)) DESC
                LIMIT 10""",
-            (self.user_id, self.text_query, self.text_query)
+            (self.user_id, self.text_query, self.text_query),
         )
 
         self.analyze_query(
@@ -214,7 +212,7 @@ class QueryAnalyzer:
                AND text_search_vector @@ websearch_to_tsquery('english', %s)
                ORDER BY ts_rank_cd(text_search_vector, websearch_to_tsquery('english', %s)) DESC
                LIMIT 10""",
-            (self.jsonb_key, self.text_query, self.text_query)
+            (self.jsonb_key, self.text_query, self.text_query),
         )
 
         # Text Search with JOIN
@@ -228,7 +226,7 @@ class QueryAnalyzer:
                WHERE c.text_search_vector @@ websearch_to_tsquery('english', %s)
                ORDER BY ts_rank_cd(c.text_search_vector, websearch_to_tsquery('english', %s)) DESC
                LIMIT 10""",
-            (self.text_query, self.text_query)
+            (self.text_query, self.text_query),
         )
 
         self.analyze_query(
@@ -240,7 +238,7 @@ class QueryAnalyzer:
                AND c.text_search_vector @@ websearch_to_tsquery('english', %s)
                ORDER BY ts_rank_cd(c.text_search_vector, websearch_to_tsquery('english', %s)) DESC
                LIMIT 10""",
-            (self.user_id, self.text_query, self.text_query)
+            (self.user_id, self.text_query, self.text_query),
         )
 
         # Hybrid Search Queries (Manual RRF)
@@ -271,7 +269,7 @@ class QueryAnalyzer:
                    COALESCE(1.0/(v.rank + 50), 0) +
                    COALESCE(1.0/(t.rank + 50), 0) DESC
                LIMIT 10""",
-            (self.embedding, self.embedding, self.text_query, self.text_query)
+            (self.embedding, self.embedding, self.text_query, self.text_query),
         )
 
         self.analyze_query(
@@ -301,7 +299,7 @@ class QueryAnalyzer:
                    COALESCE(1.0/(v.rank + 50), 0) +
                    COALESCE(1.0/(t.rank + 50), 0) DESC
                LIMIT 10""",
-            (self.embedding, self.user_id, self.embedding, self.text_query, self.user_id, self.text_query)
+            (self.embedding, self.user_id, self.embedding, self.text_query, self.user_id, self.text_query),
         )
 
         # Hybrid with JOIN
@@ -336,7 +334,7 @@ class QueryAnalyzer:
                    COALESCE(1.0/(v.rank + 50), 0) +
                    COALESCE(1.0/(t.rank + 50), 0) DESC
                LIMIT 10""",
-            (self.embedding, self.user_id, self.embedding, self.text_query, self.user_id, self.text_query)
+            (self.embedding, self.user_id, self.embedding, self.text_query, self.user_id, self.text_query),
         )
 
         # Special Cases
@@ -351,7 +349,7 @@ class QueryAnalyzer:
                JOIN user_documents d ON c.user_document_id = d.id
                ORDER BY c.embedding <#> %s::vector
                LIMIT 10""",
-            (self.embedding,)
+            (self.embedding,),
         )
         self.cur.execute("SET enable_nestloop = on")
 
@@ -362,7 +360,7 @@ class QueryAnalyzer:
             """SELECT id FROM user_document_chunks
                ORDER BY embedding <#> %s::vector
                LIMIT 10""",
-            (self.embedding,)
+            (self.embedding,),
         )
         self.cur.execute("SET enable_seqscan = on")
 
@@ -382,7 +380,7 @@ class QueryAnalyzer:
             if txt_file.name == "summary.txt":
                 continue
 
-            with open(txt_file, 'r') as f:
+            with open(txt_file) as f:
                 content = f.read()
 
             # Extract query name from filename
@@ -393,7 +391,7 @@ class QueryAnalyzer:
             planning_time = None
             total_time = None
 
-            for line in content.split('\n'):
+            for line in content.split("\n"):
                 if line.startswith("Execution Time:"):
                     execution_time = float(line.split(":")[1].replace("ms", "").strip())
                 elif line.startswith("Planning Time:"):
@@ -402,15 +400,17 @@ class QueryAnalyzer:
                     total_time = float(line.split(":")[1].replace("ms", "").strip())
 
             if total_time is not None:
-                summary_data.append({
-                    'name': query_name,
-                    'execution_time': execution_time,
-                    'planning_time': planning_time,
-                    'total_time': total_time
-                })
+                summary_data.append(
+                    {
+                        "name": query_name,
+                        "execution_time": execution_time,
+                        "planning_time": planning_time,
+                        "total_time": total_time,
+                    }
+                )
 
         # Sort by total time
-        summary_data.sort(key=lambda x: x['total_time'])
+        summary_data.sort(key=lambda x: x["total_time"])
 
         # Create summary text file
         summary_text = []
@@ -433,12 +433,16 @@ class QueryAnalyzer:
             summary_text.append("HIGHLIGHTS:")
             summary_text.append("-" * 40)
             summary_text.append(f"Fastest: {summary_data[0]['name']} ({summary_data[0]['total_time']:.2f}ms)")
-            summary_text.append(f"Slowest: {summary_data[-1]['name']} ({summary_data[-1]['total_time']:.2f}ms)")
-            summary_text.append(f"Range: {summary_data[-1]['total_time'] / summary_data[0]['total_time']:.1f}x difference")
+            summary_text.append(
+                f"Slowest: {summary_data[-1]['name']} ({summary_data[-1]['total_time']:.2f}ms)"
+            )
+            summary_text.append(
+                f"Range: {summary_data[-1]['total_time'] / summary_data[0]['total_time']:.1f}x difference"
+            )
 
         # Write summary
-        with open(self.output_dir / "summary.txt", 'w') as f:
-            f.write('\n'.join(summary_text))
+        with open(self.output_dir / "summary.txt", "w") as f:
+            f.write("\n".join(summary_text))
 
         # Print summary
         print("\n[Performance Summary]")

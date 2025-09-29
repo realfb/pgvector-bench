@@ -1,7 +1,3 @@
-"""
-Query logic for hybrid search with PostgreSQL and pgvector
-"""
-
 import os
 import time
 from typing import List, Optional, Dict, Any
@@ -30,12 +26,12 @@ class SearchEngine:
         if use_pooling:
             # Use connection pooling for better performance
             self.engine = create_engine(
-                db_url, 
+                db_url,
                 echo=False,
-                pool_size=5,           # Number of connections to maintain in pool
-                max_overflow=10,       # Maximum overflow connections
-                pool_pre_ping=True,    # Test connections before using
-                pool_recycle=3600     # Recycle connections after 1 hour
+                pool_size=5,  # Number of connections to maintain in pool
+                max_overflow=10,  # Maximum overflow connections
+                pool_pre_ping=True,  # Test connections before using
+                pool_recycle=3600,  # Recycle connections after 1 hour
             )
         else:
             self.engine = create_engine(db_url, echo=False)
@@ -67,7 +63,7 @@ class SearchEngine:
             Tuple of (search results, latency in ms)
         """
         start_time = time.time()
-        
+
         with self.engine.connect() as conn:
             # Convert embedding to PostgreSQL array format
             embedding_str = "[" + ",".join(map(str, embedding)) + "]"
@@ -109,7 +105,7 @@ class SearchEngine:
                 }
                 for row in result
             ]
-            
+
         latency_ms = (time.time() - start_time) * 1000
         return results, latency_ms
 
@@ -129,7 +125,7 @@ class SearchEngine:
             Tuple of (search results, latency in ms)
         """
         start_time = time.time()
-        
+
         with self.engine.connect() as conn:
             # Convert embedding to PostgreSQL vector format
             embedding_str = "[" + ",".join(map(str, embedding)) + "]"
@@ -145,12 +141,9 @@ class SearchEngine:
                 LIMIT :limit
             """)
 
-            result = conn.execute(
-                query,
-                {"user_id": user_id, "embedding": embedding_str, "limit": limit}
-            )
+            result = conn.execute(query, {"user_id": user_id, "embedding": embedding_str, "limit": limit})
             results = [dict(row._mapping) for row in result]
-        
+
         latency_ms = (time.time() - start_time) * 1000
         return results, latency_ms
 
@@ -170,7 +163,7 @@ class SearchEngine:
             Tuple of (search results, latency in ms)
         """
         start_time = time.time()
-        
+
         with self.engine.connect() as conn:
             # Optimized query using user_id directly on chunks
             query = text("""
@@ -188,12 +181,9 @@ class SearchEngine:
                 LIMIT :limit
             """)
 
-            result = conn.execute(
-                query,
-                {"user_id": user_id, "query": query_text, "limit": limit}
-            )
+            result = conn.execute(query, {"user_id": user_id, "query": query_text, "limit": limit})
             results = [dict(row._mapping) for row in result]
-        
+
         latency_ms = (time.time() - start_time) * 1000
         return results, latency_ms
 
@@ -228,26 +218,28 @@ class SearchEngine:
         else:  # HYBRID
             if not request.embedding or not request.query_text:
                 raise ValueError("Hybrid search requires both embedding and query_text")
-            
+
             # Use the optimized database hybrid search function
             results, _ = self.hybrid_search_function(
                 user_id=request.user_id,
                 embedding=request.embedding,
                 query_text=request.query_text,
                 limit=request.limit,
-                rrf_k=request.rrf_k
+                rrf_k=request.rrf_k,
             )
-            
+
             # Process results into SearchResult objects
             search_results = []
             for r in results:
-                search_results.append(SearchResult(
-                    chunk_id=r['chunk_id'],
-                    document_id=r['document_id'],
-                    title="",  # Title fetched separately if needed
-                    text=self._truncate_text(r['text'], 200),
-                    score=r['score']
-                ))
+                search_results.append(
+                    SearchResult(
+                        chunk_id=r["chunk_id"],
+                        document_id=r["document_id"],
+                        title="",  # Title fetched separately if needed
+                        text=self._truncate_text(r["text"], 200),
+                        score=r["score"],
+                    )
+                )
             return search_results
 
     def _process_single_search_results(self, results: List[Dict], search_type: str) -> List[SearchResult]:
@@ -267,7 +259,6 @@ class SearchEngine:
             search_results.append(sr)
 
         return search_results
-
 
     def _truncate_text(self, text: str, max_length: int) -> str:
         """Truncate text to maximum length with ellipsis"""
@@ -332,7 +323,7 @@ def fetch_parent_documents(engine, search_results: list, user_id: int) -> tuple[
         Tuple of (documents map, latency in ms)
     """
     start_time = time.time()
-    
+
     # Step 1: Extract unique document IDs (preserving order by best score)
     unique_doc_ids = []
     seen = set()
@@ -353,10 +344,7 @@ def fetch_parent_documents(engine, search_results: list, user_id: int) -> tuple[
     """)
 
     with engine.connect() as conn:
-        result = conn.execute(
-            batch_query, 
-            {"doc_ids": unique_doc_ids, "user_id": user_id}
-        )
+        result = conn.execute(batch_query, {"doc_ids": unique_doc_ids, "user_id": user_id})
 
         # Step 3: Create efficient mapping structure
         documents_map = {}
@@ -450,15 +438,13 @@ def main():
                 limit=args.limit,
                 rrf_k=args.rrf_k,
             )
-            
+
             print(f"[yellow]Search latency: {search_latency:.2f}ms[/yellow]\n")
 
             # Fetch parent documents if requested
             if args.fetch_docs:
                 print("[cyan]Fetching parent documents...[/cyan]")
-                documents_map, fetch_latency = fetch_parent_documents(
-                    engine.engine, results, args.user_id
-                )
+                documents_map, fetch_latency = fetch_parent_documents(engine.engine, results, args.user_id)
                 enriched_results = create_enriched_results(results, documents_map)
 
                 # Display document fetch summary
@@ -474,7 +460,9 @@ def main():
                     doc = enriched["document"]
                     if doc:
                         print(f"[bold]#{idx} Document: {doc['title']}[/bold]")
-                        print(f"  Chunk ID: {chunk['chunk_id']}, Score: {chunk['score']:.4f} (K: {chunk.get('k_score', 0):.4f}, V: {chunk.get('v_score', 0):.4f})")
+                        print(
+                            f"  Chunk ID: {chunk['chunk_id']}, Score: {chunk['score']:.4f} (K: {chunk.get('k_score', 0):.4f}, V: {chunk.get('v_score', 0):.4f})"
+                        )
                         print(f"  Document ID: {doc['id']}")
                         print(f"  Chunk text: {chunk['text'][:150]}...")
                         print()
@@ -501,7 +489,7 @@ def main():
             response = engine.search(request)
             search_latency = (time.time() - start_time) * 1000
             results = [SearchResult(**r) for r in response.results]
-            
+
             print(f"[yellow]Search latency: {search_latency:.2f}ms[/yellow]\n")
 
             # Fetch parent documents if requested
@@ -536,7 +524,9 @@ def main():
                     doc = enriched["document"]
                     if doc:
                         print(f"[bold]#{idx} Document: {doc['title']}[/bold]")
-                        print(f"  Chunk ID: {chunk['chunk_id']}, Score: {chunk['score']:.4f} (K: {chunk.get('k_score', 0):.4f}, V: {chunk.get('v_score', 0):.4f})")
+                        print(
+                            f"  Chunk ID: {chunk['chunk_id']}, Score: {chunk['score']:.4f} (K: {chunk.get('k_score', 0):.4f}, V: {chunk.get('v_score', 0):.4f})"
+                        )
                         print(f"  Document ID: {doc['id']}")
                         print(f"  Chunk text: {chunk['text'][:150]}...")
                         print()
