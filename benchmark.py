@@ -11,7 +11,6 @@ from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, asdict
 from enum import Enum
 import argparse
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 load_dotenv()
 
@@ -97,21 +96,32 @@ class ComprehensiveBenchmark:
 
         jsonb_filter = None
         if keys:
-            key = keys[0]["key"]
-            # Get common value
+            # Rotate through different keys for diversity
+            import random
+            # Use different keys based on test run to get variety
+            key_idx = random.randint(0, min(2, len(keys) - 1))
+            key = keys[key_idx]["key"]
+
+            # Get common values for this key
             self.cur.execute(
                 """
                 SELECT meta->>%s as val, COUNT(*) as cnt
                 FROM user_document_chunks
                 WHERE meta ? %s AND meta->>%s IS NOT NULL
-                GROUP BY val ORDER BY cnt DESC LIMIT 5
+                GROUP BY val ORDER BY cnt DESC LIMIT 10
             """,
                 (key, key, key),
             )
             values = self.cur.fetchall()
 
-            if values and values[0]["cnt"] > 100:
-                jsonb_filter = {key: values[0]["val"]}
+            if values:
+                # Randomly select from top values for diversity
+                # Weight towards more common values but allow variety
+                top_values = [v for v in values if v["cnt"] > 100]
+                if top_values:
+                    selected = random.choice(top_values[:5])
+                    jsonb_filter = {key: selected["val"]}
+                    print(f"Selected JSONB filter: {jsonb_filter} (count: {selected['cnt']})")
 
         # Sample test data
         self.cur.execute(
@@ -199,7 +209,7 @@ class ComprehensiveBenchmark:
             # Build query based on schema and filter
             if schema == SchemaDesign.DENORMALIZED:
                 base = "SELECT id FROM user_document_chunks"
-                order = f"ORDER BY embedding <#> %s::vector LIMIT %s"
+                order = "ORDER BY embedding <#> %s::vector LIMIT %s"
 
                 if filter_strat == FilterStrategy.NO_FILTER:
                     query = f"{base} {order}"
@@ -219,7 +229,7 @@ class ComprehensiveBenchmark:
             else:  # NORMALIZED_JOIN
                 base = """SELECT c.id FROM user_document_chunks c
                          JOIN user_documents d ON c.user_document_id = d.id"""
-                order = f"ORDER BY c.embedding <#> %s::vector LIMIT %s"
+                order = "ORDER BY c.embedding <#> %s::vector LIMIT %s"
 
                 if filter_strat == FilterStrategy.NO_FILTER:
                     query = f"{base} {order}"
@@ -409,42 +419,6 @@ class ComprehensiveBenchmark:
 
         return results
 
-    def bench_concurrency(self, data: Dict) -> Dict:
-        """Test concurrent query performance."""
-
-        def run_query():
-            conn = psycopg2.connect(**DB_CONFIG)
-            cur = conn.cursor()
-            sample = data["samples"][0]
-            vector = self._vector_str(sample["embedding"])
-
-            start = time.perf_counter()
-            cur.execute(
-                "SELECT * FROM hybrid_search(%s, %s, %s::vector(768), %s)",
-                (1, sample["search_text"], vector, 10),
-            )
-            cur.fetchall()
-            elapsed = (time.perf_counter() - start) * 1000
-
-            cur.close()
-            conn.close()
-            return elapsed
-
-        results = {}
-        for threads in [1, 2, 5, 10]:
-            with ThreadPoolExecutor(max_workers=threads) as executor:
-                start = time.time()
-                futures = [executor.submit(run_query) for _ in range(20)]
-                times = [f.result() for f in as_completed(futures)]
-                total_time = (time.time() - start) * 1000
-
-                results[f"{threads}_threads"] = {
-                    "avg_ms": mean(times),
-                    "total_ms": total_time,
-                    "qps": (20 / total_time) * 1000,
-                }
-
-        return results
 
     def run_comprehensive(self) -> None:
         """Run all benchmark scenarios."""
@@ -499,15 +473,11 @@ class ComprehensiveBenchmark:
         weight_results = self.bench_weight_variations(data)
         self.results.extend(weight_results)
 
-        # Concurrency test
-        print("\n🔥 Running concurrency tests...")
-        conc_results = self.bench_concurrency(data)
+        # Display and save results
+        self.display_results()
+        self.save_results()
 
-        # Display results
-        self.display_results(conc_results)
-        self.save_results(conc_results)
-
-    def display_results(self, conc_results: Dict) -> None:
+    def display_results(self) -> None:
         """Display formatted results."""
         if not self.results:
             print("No results to display")
@@ -669,26 +639,6 @@ class ComprehensiveBenchmark:
                 console.print("\n")
                 console.print(weight_table)
 
-            # Concurrency table
-            if conc_results:
-                conc_table = Table(title="🚀 Concurrent Query Throughput")
-                conc_table.add_column("Threads", style="cyan", justify="center")
-                conc_table.add_column("Avg Latency", justify="right", style="green")
-                conc_table.add_column("Total Time", justify="right", style="yellow")
-                conc_table.add_column("QPS", justify="right", style="magenta")
-
-                for name, metrics in sorted(conc_results.items()):
-                    threads = name.split("_")[0]
-                    conc_table.add_row(
-                        threads,
-                        f"{metrics['avg_ms']:.2f}ms",
-                        f"{metrics['total_ms']:.1f}ms",
-                        f"{metrics['qps']:.1f}",
-                    )
-
-                console.print("\n")
-                console.print(conc_table)
-
         except ImportError:
             # Fallback if rich is not available
             if weights:
@@ -762,7 +712,7 @@ class ComprehensiveBenchmark:
         print("    • jsonb: Filter by JSONB metadata (meta @> filter)")
         print("    • composite: Multiple filters (user_id + date/metadata)")
 
-    def save_results(self, conc_results: Dict) -> None:
+    def save_results(self) -> None:
         """Save comprehensive results."""
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         os.makedirs("sql-out", exist_ok=True)
@@ -772,7 +722,6 @@ class ComprehensiveBenchmark:
             "timestamp": timestamp,
             "config": {"queries": self.queries, "limit": self.limit},
             "results": [asdict(r) for r in self.results],
-            "concurrency": conc_results,
             "summary": {
                 "total_tests": len(self.results),
                 "best_vector_ms": min(
@@ -782,7 +731,7 @@ class ComprehensiveBenchmark:
                 "best_hybrid_ms": min(
                     [r.avg_ms for r in self.results if r.search_type == "hybrid"], default=0
                 ),
-                "max_qps": max([m["qps"] for m in conc_results.values()], default=0),
+                "max_qps": max([r.qps for r in self.results], default=0),
             },
         }
 
@@ -804,7 +753,7 @@ class ComprehensiveBenchmark:
                     f"{r.recall:.3f},{r.mrr:.3f},{r.qps:.1f}\n"
                 )
 
-        print(f"\n✅ Results saved to:")
+        print("\n✅ Results saved to:")
         print(f"  • {json_file}")
         print(f"  • {csv_file}")
 
